@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import VideoUploader from './components/VideoUploader';
 import DubbingStudio from './components/DubbingStudio';
-import { analyzeAndTranslateVideo, generateUzbekSpeech } from './services/geminiService';
+import { analyzeAndTranslateVideo, generateSpeech } from './services/geminiService';
 import { ProcessStatus, DubbingResult, ProcessingError } from './types';
 
 const App: React.FC = () => {
@@ -19,6 +19,7 @@ const App: React.FC = () => {
   } | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<string>('Fenrir');
   const [editableText, setEditableText] = useState<string>('');
+  const [targetLanguage, setTargetLanguage] = useState<string>("O'zbek"); // Added target language
 
   // Helper to get video duration before processing
   const getVideoDuration = (file: File): Promise<number> => {
@@ -47,7 +48,8 @@ const App: React.FC = () => {
       console.log(`Video duration detected: ${duration} seconds`);
 
       // Step 1: Analyze and Translate
-      const analysis = await analyzeAndTranslateVideo(file, duration);
+      // Need to adjust analyzeAndTranslateVideo to accept targetLanguage if we want full support.
+      const analysis = await analyzeAndTranslateVideo(file, duration, targetLanguage);
       
       // Save data and move to Review step
       setTempData(analysis);
@@ -68,7 +70,7 @@ const App: React.FC = () => {
     try {
       // Step 2: Generate Speech
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      const audioBuffer = await generateUzbekSpeech(editableText, audioCtx, selectedVoice);
+      const audioBuffer = await generateSpeech(editableText, audioCtx, selectedVoice);
       await audioCtx.close(); 
 
       setResult({
@@ -89,11 +91,11 @@ const App: React.FC = () => {
     
     // Check for common error patterns
     if (friendlyMessage.includes('Failed to fetch')) {
-      friendlyMessage = "Internetga ulanishda xatolik yuz berdi. Ehtimol fayl hajmi juda katta (10MB+) yoki internet tezligi past.";
+      friendlyMessage = "Internetga ulanishda xatolik yuz berdi. Ehtimol fayl hajmi katta (50MB+) yoki internet tezligi past.";
     } else if (friendlyMessage.includes('API Key')) {
       friendlyMessage = "API Kaliti topilmadi. Tizim sozlamalarini tekshiring.";
     } else if (friendlyMessage.includes('400')) {
-        friendlyMessage = "Noto'g'ri so'rov. Ehtimol fayl formati yoki hajmi (max 10MB) to'g'ri kelmadi.";
+        friendlyMessage = "Noto'g'ri so'rov. Ehtimol fayl formati xato yoki hajmi (max 50MB) to'g'ri kelmadi.";
     } else if (friendlyMessage.includes('429')) {
         friendlyMessage = "API so'rovlar limiti tugadi. Birozdan so'ng urinib ko'ring.";
     } else if (friendlyMessage.includes('503')) {
@@ -138,11 +140,25 @@ const App: React.FC = () => {
         
         {/* Intro Text */}
         {status === ProcessStatus.IDLE && (
-          <div className="text-center mb-10 max-w-2xl animate-fade-in-up">
-            <h2 className="text-4xl font-bold mb-4 text-white">Ingliz tilidan O'zbek tiliga <br/><span className="text-blue-500">Video Dublyaj</span></h2>
-            <p className="text-gray-400 text-lg">
-              Videoni yuklang. Biz uni tahlil qilamiz, siz tarjimani tasdiqlaysiz va biz uni ovozlashtiramiz.
+          <div className="text-center mb-8 max-w-2xl animate-fade-in-up">
+            <h2 className="text-4xl font-bold mb-4 text-white">Video Tarjima va <br/><span className="text-blue-500">Dublyaj</span></h2>
+            <p className="text-gray-400 text-lg mb-6">
+              Videoni yuklang. Biz uni tahlil qilamiz, matnni tarjima qilamiz va yangi ovoz bilan boyitamiz.
             </p>
+            
+            {/* Language Selector */}
+            <div className="flex items-center justify-center gap-3 mb-4 bg-gray-800 p-2 rounded-xl inline-flex border border-gray-700 shadow-sm mx-auto">
+              <span className="text-sm font-medium text-gray-300 ml-2">Tilni tanlang:</span>
+              <select 
+                value={targetLanguage} 
+                onChange={(e) => setTargetLanguage(e.target.value)}
+                className="bg-gray-900 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 cursor-pointer w-[150px]"
+              >
+                <option value="O'zbek">O'zbek</option>
+                <option value="Rus (Russian)">Rus (Русский)</option>
+                <option value="Ingliz (English)">Ingliz (English)</option>
+              </select>
+            </div>
           </div>
         )}
 
@@ -160,7 +176,7 @@ const App: React.FC = () => {
             </h3>
             <p className="text-gray-400">
               {status === ProcessStatus.ANALYZING 
-                ? "Inglizcha matn aniqlanib, o'zbekchaga tarjima qilinmoqda." 
+                ? `Inglizcha matn aniqlanib, '${targetLanguage}' tiliga tarjima qilinmoqda...` 
                 : "Tarjima audio formatga o'tkazilmoqda."}
             </p>
           </div>
@@ -175,7 +191,7 @@ const App: React.FC = () => {
              </h3>
              
              <div className="mb-4">
-               <label className="block text-xs text-gray-400 mb-1 uppercase tracking-wide">O'zbekcha Matn</label>
+               <label className="block text-xs text-gray-400 mb-1 uppercase tracking-wide">Tarjima matni ({targetLanguage})</label>
                <textarea 
                 value={editableText}
                 onChange={(e) => setEditableText(e.target.value)}

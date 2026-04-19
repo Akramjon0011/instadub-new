@@ -11,19 +11,51 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reduced limit to 10MB to ensure stability with Gemini API (browser fetch limits)
-  const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+  const [durationError, setDurationError] = useState<string | null>(null);
+  
+  // Update limit to 50MB
+  const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+  const MAX_DURATION_SECONDS = 180; // 3 minutes
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+  // Helper to check duration before uploading
+  const checkDuration = (file: File): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(video.src);
+        if (video.duration > MAX_DURATION_SECONDS) {
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      };
+      video.onerror = () => {
+        resolve(true); // If cannot read, pass through and let it fail later
+      };
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      setDurationError(null);
+      setError(null);
       
       if (file.size > MAX_SIZE_BYTES) {
-        alert("Fayl hajmi juda katta! Barqaror ishlash uchun 10MB gacha bo'lgan videolarni yuklang.");
+        alert("Fayl hajmi juda katta! 50MB gacha bo'lgan videolarni yuklang.");
         e.target.value = ''; // Reset input
         return;
       }
       
+      const isValidDuration = await checkDuration(file);
+      if (!isValidDuration) {
+        setDurationError("Video hajmi uzun (max 3 daqiqa). Qisqaroq video yuklang.");
+        e.target.value = '';
+        return;
+      }
+
       onFileSelect(file);
     }
   };
@@ -52,7 +84,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
       const blob = await response.blob();
 
       if (blob.size > MAX_SIZE_BYTES) {
-        throw new Error("Video hajmi 10MB dan katta. Iltimos, kichikroq video (hikoya/reels) yuklang.");
+        throw new Error("Video hajmi ayni paytda juda katta. Iltimos, kichikroq video (max 50MB) yuklang.");
       }
 
       const contentType = response.headers.get("content-type");
@@ -72,7 +104,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
       
       if (err.message.includes('Failed to fetch')) {
         msg = "Havola ochilmadi (CORS cheklovi). Sayt ruxsat bermadi. Iltimos, videoni qurilmangizga saqlab, fayl sifatida yuklang.";
-      } else if (err.message.includes('10MB')) {
+      } else if (err.message.includes('50MB')) {
         msg = err.message;
       }
 
@@ -127,7 +159,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
             </svg>
             <p className="mb-2 text-sm text-gray-300"><span className="font-semibold">Video yuklash uchun bosing</span></p>
-            <p className="text-xs text-gray-400">MP4, MOV (max 10MB)</p>
+            <p className="text-xs text-gray-400">MP4, MOV (max 50MB, &lt; 3 daqiqa)</p>
           </div>
           <input 
             id="video-upload" 
@@ -138,6 +170,13 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
             disabled={disabled}
           />
         </label>
+      )}
+      
+      {/* Show duration error if any */}
+      {activeTab === 'file' && durationError && (
+          <div className="mt-4 p-3 text-sm text-red-200 bg-red-900/30 border border-red-800/50 rounded-lg">
+            <span className="font-bold">Xatolik:</span> {durationError}
+          </div>
       )}
 
       {/* Tab Content: URL Upload */}

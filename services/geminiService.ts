@@ -3,8 +3,8 @@ import { fileToGenerativePart, decodeAudioData } from "../utils/audioUtils";
 
 const apiKey = process.env.API_KEY || '';
 
-// 1. Analyze Video: English Audio -> Uzbek Text & Topic & Voice Tone
-export const analyzeAndTranslateVideo = async (videoFile: File, duration: number): Promise<{ translatedText: string; originalTranscription: string; topicSlug: string; recommendedVoice: string }> => {
+// 1. Analyze Video: English Audio -> Target Language Text & Topic & Voice Tone
+export const analyzeAndTranslateVideo = async (videoFile: File, duration: number, targetLanguage: string = "O'zbek"): Promise<{ translatedText: string; originalTranscription: string; topicSlug: string; recommendedVoice: string }> => {
   if (!apiKey) throw new Error("API Key topilmadi. Iltimos, API kaliti sozlanganligini tekshiring.");
   
   const ai = new GoogleGenAI({ apiKey });
@@ -16,10 +16,12 @@ export const analyzeAndTranslateVideo = async (videoFile: File, duration: number
   const targetWordCount = Math.max(5, Math.ceil(duration * 2.2)); 
 
   const prompt = `
-    You are a professional Content Localizer and Dubbing Director for the Uzbek market.
-    Your goal is NOT just to translate, but to fully convey the MEANING, CONTEXT, and EMOTION of the video.
+    You are a professional Content Localizer and Dubbing Director.
+    Your target language for the dubbing scripts is: ${targetLanguage}.
+    Your goal is NOT just to translate, but to fully convey the MEANING, CONTEXT, and EMOTION of the video into the target language.
 
     METADATA:
+    - Target Language: ${targetLanguage}
     - Video Duration: ${Math.ceil(duration)} seconds.
     - Target Word Count: Approximately ${targetWordCount} words (Adjust to match the video's pacing).
 
@@ -30,26 +32,26 @@ export const analyzeAndTranslateVideo = async (videoFile: File, duration: number
     
     2. **CREATIVE ADAPTATION (CRITICAL):** 
        - **Do NOT translate word-for-word.** Literal translation is forbidden if it sounds dry.
-       - **Convey the Full Meaning:** If the speaker uses a short English phrase but the visual context implies a larger concept, EXPLAIN IT in Uzbek. 
-       - **Localization:** Use natural, modern Uzbek (Instagram/TikTok style). Use metaphors or idioms that Uzbeks understand if they fit the context.
-       - **Visual Narration:** If the speaker says "Look at this" but doesn't describe it, you MUST describe what "this" is in the Uzbek dub (e.g., instead of "Bunga qarang", say "Mana bu ajoyib manzaraga qarang").
-       - **Objective:** The Uzbek listener should understand the video BETTER than someone just listening to the English audio.
+       - **Convey the Full Meaning:** If the speaker uses a short English phrase but the visual context implies a larger concept, EXPLAIN IT clearly in ${targetLanguage}. 
+       - **Localization:** Use natural, modern conversational tone for ${targetLanguage} (TikTok/Instagram style). Use idioms that fit the language naturally.
+       - **Objective:** The listener in ${targetLanguage} should understand the video BETTER than someone just listening to the original audio.
 
     3. **TIMING & PACING:** 
-       - The Uzbek text length MUST match the video flow.
+       - The translated text length MUST match the video flow temporally.
        - If the video is fast-paced, keep it punchy.
-       - If the video is slow and atmospheric, use richer, descriptive words to fill the silence naturally.
+       - If the video is slow and atmospheric, use richer, descriptive words to fill the silence.
 
     4. **VOICE MATCHING:** Listen to the original speaker's gender and tone.
+       - If target language is Russian or English, prefer Puck or Charon for men, and Kore for women.
        - If FEMALE: Select 'Kore' (Natural/Clear) or 'Zephyr' (Soft/Calm).
        - If MALE: Select 'Puck' (Natural/Mid), 'Charon' (Deep/Calm), or 'Fenrir' (Deep/Intense/Narrator).
     
-    5. **TOPIC:** Create a file-safe slug (e.g. 'tuxum_haqida').
+    5. **TOPIC:** Create a file-safe slug describing the topic.
 
-    Output JSON format:
+    Output JSON format exactly like this:
     {
-      "english_transcription": "Transcription of the original audio...",
-      "uzbek_translation": "The adapted, rich, and context-aware Uzbek narration...",
+      "original_transcription": "Transcription of the original audio...",
+      "translated_script": "The adapted, rich, and context-aware script in ${targetLanguage}...",
       "topic_slug": "short_topic_name",
       "recommended_voice": "VoiceName"
     }
@@ -74,10 +76,10 @@ export const analyzeAndTranslateVideo = async (videoFile: File, duration: number
   try {
     const json = JSON.parse(text);
     return {
-      translatedText: json.uzbek_translation,
-      originalTranscription: json.english_transcription,
+      translatedText: json.translated_script || json.uzbek_translation, // fallback if it disobeys
+      originalTranscription: json.original_transcription || json.english_transcription,
       topicSlug: json.topic_slug || 'video_dublyaj',
-      recommendedVoice: json.recommended_voice || 'Fenrir' // Default to Fenrir if failed
+      recommendedVoice: json.recommended_voice || 'Fenrir' 
     };
   } catch (e) {
     console.error("Failed to parse JSON", e);
@@ -90,8 +92,8 @@ export const analyzeAndTranslateVideo = async (videoFile: File, duration: number
   }
 };
 
-// 2. Generate Audio: Uzbek Text -> Audio Buffer (Now accepts voiceName)
-export const generateUzbekSpeech = async (text: string, audioContext: AudioContext, voiceName: string = 'Fenrir'): Promise<AudioBuffer> => {
+// 2. Generate Audio: Target Text -> Audio Buffer
+export const generateSpeech = async (text: string, audioContext: AudioContext, voiceName: string = 'Fenrir'): Promise<AudioBuffer> => {
   if (!apiKey) throw new Error("API Key topilmadi. Iltimos, API kaliti sozlanganligini tekshiring.");
 
   const ai = new GoogleGenAI({ apiKey });
