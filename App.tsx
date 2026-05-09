@@ -78,8 +78,13 @@ const App: React.FC = () => {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       setShowAuthModal(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Login failed", err);
+      if (err?.code === 'auth/unauthorized-domain') {
+        setError("Firebase xatosi: Sizning domeningiz (Vercel) Firebase Console'da 'Authorized domains' ro'yxatiga qo'shilmagan. Google Login ishlashi uchun domenni qo'shing.");
+      } else {
+        setError("Tizimga kirishda xatolik: " + err?.message);
+      }
     }
   };
 

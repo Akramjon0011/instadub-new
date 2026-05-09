@@ -107,7 +107,7 @@ export const generateSpeech = async (text: string, audioContext: AudioContext, v
   console.log(`Generating speech with voice: ${voiceName}`);
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.1-flash-tts-preview",
     contents: [{ parts: [{ text: cleanText }] }],
     config: {
       responseModalities: [Modality.AUDIO],
