@@ -49,7 +49,7 @@ export const analyzeAndTranslateVideo = async (videoFile: File, duration: number
   `;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-2.5-flash',
     contents: {
       parts: [
         videoPart,
@@ -107,7 +107,7 @@ export const generateSpeech = async (text: string, audioContext: AudioContext, v
   console.log(`Generating speech with voice: ${voiceName}`);
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
+    model: "gemini-2.5-flash",
     contents: [{ parts: [{ text: cleanText }] }],
     config: {
       responseModalities: [Modality.AUDIO],
