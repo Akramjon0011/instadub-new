@@ -81,10 +81,11 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error("Login failed", err);
       if (err?.code === 'auth/unauthorized-domain') {
-        setError("Firebase xatosi: Sizning domeningiz (Vercel) Firebase Console'da 'Authorized domains' ro'yxatiga qo'shilmagan. Google Login ishlashi uchun domenni qo'shing.");
+        setError({ message: "Firebase xatosi: Sizning Vercel domeningiz Firebase 'Authorized domains' ro'yxatida yo'q. Loyiha sozlamalarini to'g'rilang." });
       } else {
-        setError("Tizimga kirishda xatolik: " + err?.message);
+        setError({ message: "Tizimga kirishda xatolik: " + err?.message });
       }
+      setStatus(ProcessStatus.ERROR);
     }
   };
 
