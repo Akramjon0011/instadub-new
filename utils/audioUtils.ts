@@ -34,18 +34,35 @@ export async function decodeAudioData(
 export const fileToGenerativePart = async (file: File): Promise<{ inlineData: { data: string; mimeType: string } }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onload = () => {
       const base64String = reader.result as string;
-      // Remove the data URL prefix (e.g., "data:video/mp4;base64,")
-      const base64Data = base64String.split(',')[1];
+      if (!base64String) {
+        return reject(new Error("File empty or reading failed."));
+      }
+      const parts = base64String.split(',');
+      let base64Data = parts[1];
+      
+      // Fallback if data doesn't split properly
+      if (!base64Data) {
+         if (base64String.length > 0 && !base64String.startsWith('data:')) {
+             base64Data = base64String;
+         } else {
+             return reject(new Error("Invalid base64 string from file reader."));
+         }
+      }
+
+      if (base64Data.length === 0) {
+          return reject(new Error("Base64 string is empty."));
+      }
+
       resolve({
         inlineData: {
           data: base64Data,
-          mimeType: file.type,
+          mimeType: file.type || 'video/mp4',
         },
       });
     };
-    reader.onerror = reject;
+    reader.onerror = (e) => reject(new Error("File reader error: " + e));
     reader.readAsDataURL(file);
   });
 };

@@ -3,9 +3,10 @@ import React, { ChangeEvent, useState } from 'react';
 interface VideoUploaderProps {
   onFileSelect: (file: File) => void;
   disabled: boolean;
+  userPlan?: string;
 }
 
-const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled }) => {
+const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled, userPlan = 'free' }) => {
   const [activeTab, setActiveTab] = useState<'file' | 'url'>('file');
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -13,9 +14,15 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
 
   const [durationError, setDurationError] = useState<string | null>(null);
   
-  // Update limit to 50MB
-  const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
-  const MAX_DURATION_SECONDS = 180; // 3 minutes
+  const planLimits = {
+    free: { name: "1 daqiqa, 20MB", size: 20 * 1024 * 1024, duration: 60 },
+    pro: { name: "5 daqiqa, 100MB", size: 100 * 1024 * 1024, duration: 300 },
+    creator: { name: "10 daqiqa, 500MB", size: 500 * 1024 * 1024, duration: 600 }
+  };
+  const limits = planLimits[userPlan as keyof typeof planLimits] || planLimits.free;
+  
+  const MAX_SIZE_BYTES = limits.size;
+  const MAX_DURATION_SECONDS = limits.duration;
 
   // Helper to check duration before uploading
   const checkDuration = (file: File): Promise<boolean> => {
@@ -44,14 +51,14 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
       setError(null);
       
       if (file.size > MAX_SIZE_BYTES) {
-        alert("Fayl hajmi juda katta! 50MB gacha bo'lgan videolarni yuklang.");
+        alert(`Fayl hajmi juda katta! ${limits.name} gacha bo'lgan videolarni yuklang.`);
         e.target.value = ''; // Reset input
         return;
       }
       
       const isValidDuration = await checkDuration(file);
       if (!isValidDuration) {
-        setDurationError("Video hajmi uzun (max 3 daqiqa). Qisqaroq video yuklang.");
+        setDurationError(`Video hajmi uzun. Qisqaroq video yuklang (${limits.name} max).`);
         e.target.value = '';
         return;
       }
@@ -84,7 +91,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
       const blob = await response.blob();
 
       if (blob.size > MAX_SIZE_BYTES) {
-        throw new Error("Video hajmi ayni paytda juda katta. Iltimos, kichikroq video (max 50MB) yuklang.");
+        throw new Error(`Video hajmi tarifingiz doirasidan katta. Iltimos, kichikroq yuklang (max ${limits.name}).`);
       }
 
       const contentType = response.headers.get("content-type");
@@ -104,7 +111,9 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
       
       if (err.message.includes('Failed to fetch')) {
         msg = "Havola ochilmadi (CORS cheklovi). Sayt ruxsat bermadi. Iltimos, videoni qurilmangizga saqlab, fayl sifatida yuklang.";
-      } else if (err.message.includes('50MB')) {
+      } else if (err.message.includes('tarifingiz')) {
+        msg = err.message;
+      } else if (err.message.includes('video fayl emas')) {
         msg = err.message;
       }
 
@@ -159,7 +168,8 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled })
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
             </svg>
             <p className="mb-2 text-sm text-gray-300"><span className="font-semibold">Video yuklash uchun bosing</span></p>
-            <p className="text-xs text-gray-400">MP4, MOV (max 50MB, &lt; 3 daqiqa)</p>
+            <p className="text-xs text-gray-400">MP4, MOV</p>
+            <p className="text-xs text-yellow-500 mt-2">Tarifingiz bo'yicha limit: {limits.name}</p>
           </div>
           <input 
             id="video-upload" 

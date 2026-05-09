@@ -17,12 +17,6 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
   const [syncStats, setSyncStats] = useState<{ videoDur: number, audioDur: number, rate: number }>({ videoDur: 0, audioDur: 0, rate: 1 });
   const [autoSync, setAutoSync] = useState(true); // Toggle for auto-sync feature
   
-  // Karaokee / Subtitle states
-  const [showSubtitles, setShowSubtitles] = useState(true);
-  const [currentSubtitle, setCurrentSubtitle] = useState<string>('');
-  const subtitleFrameRef = useRef<number | null>(null);
-  const audioStartTimeRef = useRef<number>(0);
-  
   // Audio Context Ref to manage playback state and mixing
   const audioContextRef = useRef<AudioContext | null>(null);
   const ttsSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -33,7 +27,7 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
     setVideoUrl(url);
     
     // Initialize Audio Context
-    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 48000 });
     // Create gain node for TTS
     ttsGainRef.current = audioContextRef.current.createGain();
     ttsGainRef.current.connect(audioContextRef.current.destination);
@@ -96,8 +90,18 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
   }, []);
 
   const getSyncFactor = useCallback(() => {
-    return autoSync ? syncStats.rate : 1.0;
-  }, [autoSync, syncStats.rate]);
+    if (!autoSync) return 1.0;
+    
+    let targetAudioDur = syncStats.audioDur;
+    if (audioSpeed > 0) {
+      targetAudioDur = syncStats.audioDur / audioSpeed;
+    }
+    
+    if (targetAudioDur <= 0 || syncStats.videoDur <= 0) return 1.0;
+
+    const rawRate = syncStats.videoDur / targetAudioDur;
+    return Math.min(Math.max(rawRate, 0.2), 4.0);
+  }, [autoSync, syncStats, audioSpeed]);
 
   // Live Playback Logic
   const playDubbed = useCallback(async () => {
@@ -123,62 +127,68 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
     // MIXING
     videoRef.current.muted = false;
     videoRef.current.volume = bgVolume; 
-    
-    // Karaokee System start
-    audioStartTimeRef.current = audioContextRef.current.currentTime;
-    // We split into segments roughly. Just equal distribution to start with.
-    const words = result.translatedText.split(/\s+/);
-    const audioDur = result.audioBuffer.duration;
-    const timePerWord = audioDur ? audioDur / words.length : 1;
-    let windowSize = 4; // Show 4 words at a time
-    
-    // Request animation starts here
-    let active = true;
-    const updateSubtitle = () => {
-       if (!audioContextRef.current || !active) return;
-       const elapsed = (audioContextRef.current.currentTime - audioStartTimeRef.current) * audioSpeed;
-       // timePerWord is based on ORIGINAL duration. So if audioSpeed > 1, elapsed grows faster.
-       // The math is correct: elapsed time in "original" time scale = real elapsed * speed
-       const currentWordIndex = Math.floor(elapsed / timePerWord);
-       
-       if (currentWordIndex >= 0 && currentWordIndex < words.length) {
-         const start = Math.max(0, currentWordIndex - 1);
-         const end = Math.min(words.length, start + windowSize);
-         setCurrentSubtitle(words.slice(start, end).join(' '));
-       } else if (currentWordIndex >= words.length) {
-         setCurrentSubtitle("");
-       }
-       
-       subtitleFrameRef.current = requestAnimationFrame(updateSubtitle);
-    };
 
     // Start Video
     try {
-      await videoRef.current.play();
-    } catch (e) {
-      console.error("Video play failed", e);
+      if (!videoRef.current.error) {
+         videoRef.current.play().catch(e => {
+             console.warn("Video play failed or not supported. Playing audio only.", e);
+         });
+      } else {
+         console.warn("Video format is not supported by this browser. Playing audio only.");
+      }
+    } catch (e: any) {
+      console.warn("Video play failed or not supported. Playing audio only.", e);
     }
 
     // CRITICAL: Re-apply playback rate immediately after play starts.
     videoRef.current.playbackRate = playbackRate;
 
-    // Start Audio
+    // Start Audio immediately without awaiting video to prevent lag
     source.start(0);
-    subtitleFrameRef.current = requestAnimationFrame(updateSubtitle);
     
     ttsSourceRef.current = source;
     setIsPlaying(true);
 
-    source.onended = () => {
-      setIsPlaying(false);
-      active = false;
-      setCurrentSubtitle("");
-      videoRef.current?.pause(); 
+    let ttsEnded = false;
+    let videoEnded = false;
+    let active = true;
+
+    const stopPlayback = () => {
+       if (ttsEnded && videoEnded) {
+          setIsPlaying(false);
+          active = false;
+          videoRef.current?.pause(); 
+       }
     };
 
-    videoRef.current.onended = () => {
-       // Handled by audio
+    source.onended = () => {
+      ttsEnded = true;
+      stopPlayback();
     };
+
+    if (videoRef.current) {
+        videoRef.current.onended = () => {
+            videoEnded = true;
+            stopPlayback();
+        };
+    }
+    
+    const checkInterval = setInterval(() => {
+        if (!active || !videoRef.current) {
+            clearInterval(checkInterval);
+            return;
+        }
+        
+        // Tab throttling means we should check if media has actually played out
+        const isVideoDone = videoRef.current.ended || videoRef.current.currentTime >= videoRef.current.duration - 0.1;
+        
+        if (ttsEnded && isVideoDone) {
+            videoEnded = true;
+            stopPlayback();
+            clearInterval(checkInterval);
+        }
+    }, 1000);
 
   }, [result.audioBuffer, stopAudio, bgVolume, audioSpeed, getSyncFactor, result.translatedText]);
 
@@ -186,10 +196,6 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
     if (videoRef.current) videoRef.current.pause();
     stopAudio();
     setIsPlaying(false);
-    setCurrentSubtitle("");
-    if (subtitleFrameRef.current) {
-        cancelAnimationFrame(subtitleFrameRef.current);
-    }
   };
 
   // Recording Logic
@@ -200,6 +206,10 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
     stopAudio();
 
     try {
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+
       const dest = audioContextRef.current.createMediaStreamDestination();
 
       // 1. TTS Track -> Mixer
@@ -208,18 +218,12 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
       ttsSource.playbackRate.value = audioSpeed; 
       ttsSource.connect(dest);
 
-      // 2. Video Track setup - Capture via Canvas to burn in subtitles
+      // 2. Video Track setup - Capture directly from video
       let stream: MediaStream;
       const vid = videoRef.current as any;
-      const canvas = document.createElement('canvas');
-      canvas.width = vid.videoWidth || 1280;
-      canvas.height = vid.videoHeight || 720;
-      const ctx = canvas.getContext('2d');
       
-      if ((canvas as any).captureStream) {
-        stream = (canvas as any).captureStream(30);
-      } else if (vid.captureStream) {
-        stream = vid.captureStream(); // Fallback without burn-in
+      if (vid.captureStream) {
+        stream = vid.captureStream();
       } else if (vid.mozCaptureStream) {
         stream = vid.mozCaptureStream();
       } else {
@@ -227,23 +231,26 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
       }
 
       try {
-         const videoSource = audioContextRef.current.createMediaElementSource(videoRef.current);
-         const bgGain = audioContextRef.current.createGain();
-         bgGain.gain.value = bgVolume;
-         videoSource.connect(bgGain);
-         bgGain.connect(dest);
-         bgGain.connect(audioContextRef.current.destination);
+         const originalVidStream = vid.captureStream ? vid.captureStream() : (vid.mozCaptureStream ? vid.mozCaptureStream() : null);
+         if (originalVidStream && originalVidStream.getAudioTracks().length > 0) {
+             const bgSource = audioContextRef.current.createMediaStreamSource(originalVidStream);
+             const bgGain = audioContextRef.current.createGain();
+             bgGain.gain.value = bgVolume;
+             bgSource.connect(bgGain);
+             bgGain.connect(dest);
+         }
       } catch (e) {
-         // console.warn("Could not create MediaElementSource", e);
+         console.warn("Could not mix original video audio stream", e);
       }
 
-      const combinedStream = new MediaStream([
-        ...stream.getVideoTracks(),
-        ...dest.stream.getAudioTracks()
-      ]);
+         const combinedStream = new MediaStream([
+           ...stream.getVideoTracks(),
+           ...dest.stream.getAudioTracks()
+         ]);
 
-      const mimeType = MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" : "video/webm";
-      const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 5000000 });
+         const mimeType = MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" : "video/webm";
+         const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 25000000, audioBitsPerSecond: 256000 });
+
       const chunks: BlobPart[] = [];
 
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
@@ -251,8 +258,6 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
       let active = true;
       recorder.onstop = () => {
         active = false;
-        setCurrentSubtitle("");
-        if (subtitleFrameRef.current) cancelAnimationFrame(subtitleFrameRef.current);
         const blob = new Blob(chunks, { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -276,80 +281,60 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
       videoRef.current.playbackRate = playbackRate;
       videoRef.current.currentTime = 0;
       videoRef.current.volume = bgVolume; 
-      
-      // Subtitle recording logic
-      audioStartTimeRef.current = audioContextRef.current.currentTime;
-      const words = result.translatedText.split(/\s+/);
-      const audioDur = result.audioBuffer.duration;
-      const timePerWord = audioDur ? audioDur / words.length : 1;
-      let windowSize = 4;
-      
-      let localSubtitle = "";
-      
-      const drawFrameRec = () => {
-         if (!audioContextRef.current || !active) return;
-         
-         // 1. Calculate subtitle text
-         const elapsed = (audioContextRef.current.currentTime - audioStartTimeRef.current) * audioSpeed;
-         const currentWordIndex = Math.floor(elapsed / timePerWord);
-         
-         if (currentWordIndex >= 0 && currentWordIndex < words.length) {
-           const start = Math.max(0, currentWordIndex - 1);
-           const end = Math.min(words.length, start + windowSize);
-           localSubtitle = words.slice(start, end).join(' ');
-           // Also update UI so user sees progress
-           setCurrentSubtitle(localSubtitle);
-         } else {
-           localSubtitle = "";
-           setCurrentSubtitle("");
-         }
 
-         // 2. Draw to Canvas
-         if (ctx && vid) {
-           ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
-           
-           if (showSubtitles && localSubtitle) {
-             const fontSize = Math.max(32, Math.floor(canvas.height / 15));
-             ctx.font = `bold ${fontSize}px sans-serif`;
-             ctx.textAlign = 'center';
-             ctx.textBaseline = 'bottom';
-             
-             const x = canvas.width / 2;
-             const y = canvas.height - Math.max(40, Math.floor(canvas.height / 10));
-             
-             ctx.shadowColor = 'rgba(0, 0, 0, 1)';
-             ctx.shadowBlur = 10;
-             ctx.shadowOffsetX = 3;
-             ctx.shadowOffsetY = 3;
-             
-             ctx.lineWidth = Math.max(2, Math.floor(fontSize / 10));
-             ctx.strokeStyle = 'black';
-             ctx.strokeText(localSubtitle, x, y);
-             
-             ctx.fillStyle = '#fde047'; // yellow-300 hex equivalent
-             ctx.fillText(localSubtitle, x, y);
-             ctx.shadowColor = 'transparent'; // reset
-           }
-         }
-         
-         subtitleFrameRef.current = requestAnimationFrame(drawFrameRec);
-      };
-
-      await videoRef.current.play();
-      // Enforce rate after play
-      videoRef.current.playbackRate = playbackRate;
+      try {
+        if (!videoRef.current.error) {
+           videoRef.current.play().catch(e => console.warn(e));
+           // Enforce rate after play
+           videoRef.current.playbackRate = playbackRate;
+        }
+      } catch (e) {
+        console.warn("Video could not be played during recording", e);
+      }
 
       ttsSource.start(0);
-      subtitleFrameRef.current = requestAnimationFrame(drawFrameRec);
       
       ttsSourceRef.current = ttsSource; 
 
-      ttsSource.onended = () => {
-        recorder.stop();
-        videoRef.current?.pause();
+      let ttsEnded = false;
+      let videoEnded = false;
+
+      const finishRecording = () => {
+         if (ttsEnded && videoEnded && active) {
+            recorder.stop();
+            videoRef.current?.pause();
+            active = false;
+         }
       };
 
-    } catch (e) {
+      ttsSource.onended = () => {
+        ttsEnded = true;
+        finishRecording();
+      };
+
+      if (videoRef.current) {
+        videoRef.current.onended = () => {
+          videoEnded = true;
+          finishRecording();
+        };
+      }
+      
+      const checkInterval = setInterval(() => {
+          if (!active || !videoRef.current) {
+              clearInterval(checkInterval);
+              return;
+          }
+          
+          const isVideoDone = videoRef.current.ended || videoRef.current.currentTime >= videoRef.current.duration - 0.1;
+          
+          if (ttsEnded && isVideoDone) {
+              videoEnded = true;
+              finishRecording();
+              clearInterval(checkInterval);
+          }
+      }, 1000);
+
+    } catch (e: any) {
       console.error("Recording failed", e);
       setIsRendering(false);
       alert("Yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
@@ -376,7 +361,15 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
               src={videoUrl || undefined}
               className="w-full h-full object-contain"
               playsInline
+              muted
+              preload="auto"
               controls={false}
+              onLoadedMetadata={(e) => {
+                 const duration = e.currentTarget.duration;
+                 if (duration && !isNaN(duration)) {
+                    setSyncStats(prev => ({ ...prev, videoDur: duration }));
+                 }
+              }}
             />
             {/* Sync Status Overlay */}
             <div className="absolute top-2 left-2 right-2 bg-black/60 backdrop-blur-sm rounded px-3 py-2 text-xs text-white border border-white/10 z-10 pointer-events-none">
@@ -385,11 +378,11 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
                 <span>Audio: {formatTime(syncStats.audioDur)}</span>
               </div>
               {autoSync ? (
-                 <div className={`font-bold border-t border-white/10 pt-1 ${syncStats.rate < 0.95 ? 'text-yellow-400' : (syncStats.rate > 1.05 ? 'text-blue-400' : 'text-green-400')}`}>
-                 {syncStats.rate < 0.98 
-                    ? `⚠️ Video ${Math.round((1 - syncStats.rate) * 100)}% sekinlashdi`
-                    : syncStats.rate > 1.02 
-                      ? `⚡ Video ${Math.round((syncStats.rate - 1) * 100)}% tezlashdi`
+                 <div className={`font-bold border-t border-white/10 pt-1 ${getSyncFactor() < 0.95 ? 'text-yellow-400' : (getSyncFactor() > 1.05 ? 'text-blue-400' : 'text-green-400')}`}>
+                 {getSyncFactor() < 0.98 
+                    ? `⚠️ Video ${Math.round((1 - getSyncFactor()) * 100)}% sekinlashdi`
+                    : getSyncFactor() > 1.02 
+                      ? `⚡ Video ${Math.round((getSyncFactor() - 1) * 100)}% tezlashdi`
                       : `✅ Video va Audio mos`}
                 </div>
               ) : (
@@ -398,13 +391,15 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
                 </div>
               )}
             </div>
-            
-            {/* Dynamic Karaokee Subtitle Overlay */}
-            {showSubtitles && currentSubtitle && (
-              <div className="absolute bottom-16 left-2 right-2 text-center pointer-events-none transition-all duration-300">
-                <span className="inline-block bg-black/70 backdrop-blur-sm text-yellow-300 font-bold text-lg md:text-xl px-4 py-2 rounded-lg border border-yellow-300/20 shadow-[0_0_15px_rgba(0,0,0,0.8)] filter drop-shadow-md decoration-slice leading-snug">
-                  {currentSubtitle}
-                </span>
+
+            {/* Rendering Overlay */}
+            {isRendering && (
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-4 text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-3"></div>
+                <h3 className="text-white font-bold mb-2">Video saqlanmoqda...</h3>
+                <p className="text-yellow-400 text-sm font-medium leading-snug">
+                  Iltimos, sahifani yopmang va boshqa oynaga o'tmang! <br/>Aks holda video qotib qolishi mumkin.
+                </p>
               </div>
             )}
           </div>
@@ -420,17 +415,6 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${autoSync ? 'bg-blue-600' : 'bg-gray-600'}`}
                   >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoSync ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
-               </div>
-               
-               {/* Show Subtitles Toggle */}
-               <div className="flex-1 flex items-center justify-between bg-gray-900/50 p-3 rounded-lg border border-gray-600">
-                  <span className="text-sm text-gray-300 font-medium">Subtitrlar</span>
-                  <button 
-                    onClick={() => setShowSubtitles(!showSubtitles)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${showSubtitles ? 'bg-green-600' : 'bg-gray-600'}`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showSubtitles ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                </div>
              </div>

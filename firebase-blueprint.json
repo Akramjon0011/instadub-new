@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user in the system.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "credits": {
+          "type": "number",
+          "description": "Remaining free dubbings"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "admin"]
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["free", "pro", "creator"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "credits", "role", "plan", "createdAt", "updatedAt"]
+    },
+    "DubbingHistory": {
+      "title": "DubbingHistory",
+      "description": "Log of dubbings created by a user",
+      "type": "object",
+      "properties": {
+        "originalText": {
+          "type": "string"
+        },
+        "translatedText": {
+          "type": "string"
+        },
+        "targetLanguage": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["originalText", "translatedText", "targetLanguage", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "User"
+      },
+      "description": "Stores user profiles and credits."
+    },
+    "/users/{userId}/history/{historyId}": {
+      "schema": {
+        "$ref": "DubbingHistory"
+      },
+      "description": "Stores dubbing generation logged lines."
+    }
+  }
+}
