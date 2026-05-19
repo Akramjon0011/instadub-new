@@ -113,3 +113,27 @@ export const getDubbingHistory = async () => {
     return [];
   }
 };
+
+export const getAllUsers = async () => {
+  if (!auth.currentUser || auth.currentUser.email !== 'optimbazar@gmail.com') return [];
+  try {
+    const snaps = await getDocs(collection(db, 'users'));
+    return snaps.docs.map(d => ({ uid: d.id, ...d.data() }));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, 'users');
+    return [];
+  }
+};
+
+export const updateUserAdmin = async (uid: string, data: any) => {
+  if (!auth.currentUser || auth.currentUser.email !== 'optimbazar@gmail.com') throw new Error("Not authorized");
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      ...data,
+      updatedAt: serverTimestamp()
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `users/${uid}`);
+  }
+};

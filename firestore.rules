@@ -38,12 +38,12 @@ service cloud.firestore {
 
     // Paths
     match /users/{userId} {
-      // Users can read their own profile
-      allow get: if isOwner(userId) && isValidId(userId);
-      // Query not allowed on users collection generally, except if we want to restrict it
-      allow list: if isOwner(userId) && isValidId(userId);
+      // Admin and owner can read
+      allow get: if (isOwner(userId) || request.auth.token.email == 'optimbazar@gmail.com') && isValidId(userId);
+      allow list: if isOwner(userId) || request.auth.token.email == 'optimbazar@gmail.com';
 
-      allow create: if isOwner(userId) && isValidId(userId)
+      // Admin and owner can create
+      allow create: if (isOwner(userId) || request.auth.token.email == 'optimbazar@gmail.com') && isValidId(userId)
         && isValidUser(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
@@ -57,18 +57,19 @@ service cloud.firestore {
           )
         );
 
-      allow update: if isOwner(userId) && isValidId(userId)
+      allow update: if (isOwner(userId) || request.auth.token.email == 'optimbazar@gmail.com') && isValidId(userId)
         && isValidUser(incoming())
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           (
-            incoming().email == existing().email
+            isOwner(userId)
+            && request.auth.token.email != 'optimbazar@gmail.com'
+            && incoming().email == existing().email
             && incoming().role == existing().role
             && incoming().diff(existing()).affectedKeys().hasOnly(['credits', 'plan', 'updatedAt'])
           ) || (
             request.auth.token.email == 'optimbazar@gmail.com'
-            && incoming().diff(existing()).affectedKeys().hasAny(['updatedAt', 'credits', 'plan', 'role'])
           )
         );
         

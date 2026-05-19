@@ -1,30 +1,18 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import defaultAppletConfig from '../firebase-applet-config.json';
 
-const getFirebaseConfig = () => {
-  // agar Vercel da environment variables sozlangan bo'lsa
-  if (import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_PROJECT_ID) {
-    return {
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID,
-      measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-      firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || "(default)"
-    };
-  }
-  // aks holda default file
-  return defaultAppletConfig;
+const firebaseConfig = {
+  apiKey: "AIzaSyBbXdw0_EgEGIit8FkaZ_oZ5NxLK9lD0RM",
+  authDomain: "ornate-loader-471914-h0.firebaseapp.com",
+  projectId: "ornate-loader-471914-h0",
+  storageBucket: "ornate-loader-471914-h0.firebasestorage.app",
+  messagingSenderId: "16773751502",
+  appId: "1:16773751502:web:ed9773cc9fcc827a4c669f"
 };
 
-const firebaseConfig = getFirebaseConfig();
-
 const app = initializeApp(firebaseConfig);
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || defaultAppletConfig.firestoreDatabaseId;
+const databaseId = "ai-studio-157ea605-c159-4711-a4c4-701f821fb861";
 export const db = getFirestore(app, databaseId);
 export const auth = getAuth(app);
 
@@ -55,8 +43,10 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -71,6 +61,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('Firestore Error: ', JSON.stringify(errInfo, null, 2));
+  throw new Error(errorMessage);
 }

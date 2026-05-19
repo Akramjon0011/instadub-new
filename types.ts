@@ -17,3 +17,13 @@ export interface DubbingResult {
 export interface ProcessingError {
   message: string;
 }
+
+export interface UserData {
+  uid?: string;
+  email: string;
+  role: string;
+  plan: string;
+  credits: number;
+  createdAt?: any;
+  updatedAt?: any;
+}

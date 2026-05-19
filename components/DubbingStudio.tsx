@@ -1,5 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { DubbingResult } from '../types';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import { audioBufferToWav } from '../utils/wavLoader';
 
 interface DubbingStudioProps {
   videoFile: File;
@@ -200,144 +203,83 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
 
   // Recording Logic
   const handleDownload = async () => {
-    if (!videoRef.current || !result.audioBuffer || !audioContextRef.current) return;
-
+    if (!videoFile || !result.audioBuffer) return;
+    
     setIsRendering(true);
     stopAudio();
 
     try {
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
+      // 1. Convert AudioBuffer to WAV Blob
+      const audioBlob = audioBufferToWav(result.audioBuffer);
 
-      const dest = audioContextRef.current.createMediaStreamDestination();
-
-      // 1. TTS Track -> Mixer
-      const ttsSource = audioContextRef.current.createBufferSource();
-      ttsSource.buffer = result.audioBuffer;
-      ttsSource.playbackRate.value = audioSpeed; 
-      ttsSource.connect(dest);
-
-      // 2. Video Track setup - Capture directly from video
-      let stream: MediaStream;
-      const vid = videoRef.current as any;
+      // 2. Init FFmpeg
+      const ffmpeg = new FFmpeg();
       
-      if (vid.captureStream) {
-        stream = vid.captureStream();
-      } else if (vid.mozCaptureStream) {
-        stream = vid.mozCaptureStream();
-      } else {
-        throw new Error("Browser capture not supported");
-      }
+      ffmpeg.on('progress', ({ progress }) => {
+        console.log(`FFmpeg progress: ${Math.round(progress * 100)}%`);
+      });
 
-      try {
-         const originalVidStream = vid.captureStream ? vid.captureStream() : (vid.mozCaptureStream ? vid.mozCaptureStream() : null);
-         if (originalVidStream && originalVidStream.getAudioTracks().length > 0) {
-             const bgSource = audioContextRef.current.createMediaStreamSource(originalVidStream);
-             const bgGain = audioContextRef.current.createGain();
-             bgGain.gain.value = bgVolume;
-             bgSource.connect(bgGain);
-             bgGain.connect(dest);
-         }
-      } catch (e) {
-         console.warn("Could not mix original video audio stream", e);
-      }
-
-         const combinedStream = new MediaStream([
-           ...stream.getVideoTracks(),
-           ...dest.stream.getAudioTracks()
-         ]);
-
-         const mimeType = MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" : "video/webm";
-         const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 25000000, audioBitsPerSecond: 256000 });
-
-      const chunks: BlobPart[] = [];
-
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
+      });
       
-      let active = true;
-      recorder.onstop = () => {
-        active = false;
-        const blob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${result.fileName || 'dubbed_video'}.mp4`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        setIsRendering(false);
-        setIsPlaying(false);
-        if (videoRef.current) {
-            videoRef.current.playbackRate = 1;
-            videoRef.current.volume = 1; 
-        }
-      };
+      // Write files to FFmpeg virtual FS
+      await ffmpeg.writeFile('input_vid.mp4', await fetchFile(videoFile));
+      await ffmpeg.writeFile('input_aud.wav', await fetchFile(audioBlob));
 
-      recorder.start();
+      // 3. Map Original Video (no audio) with New Audio (with speed adjustment)
+      const speed = getSyncFactor(); 
+      let audioFilter = `volume=${Math.max(1, 1/bgVolume)}`; // Boost main audio slightly.
       
-      const playbackRate = getSyncFactor();
-      videoRef.current.playbackRate = playbackRate;
-      videoRef.current.currentTime = 0;
-      videoRef.current.volume = bgVolume; 
-
-      try {
-        if (!videoRef.current.error) {
-           videoRef.current.play().catch(e => console.warn(e));
-           // Enforce rate after play
-           videoRef.current.playbackRate = playbackRate;
-        }
-      } catch (e) {
-        console.warn("Video could not be played during recording", e);
-      }
-
-      ttsSource.start(0);
-      
-      ttsSourceRef.current = ttsSource; 
-
-      let ttsEnded = false;
-      let videoEnded = false;
-
-      const finishRecording = () => {
-         if (ttsEnded && videoEnded && active) {
-            recorder.stop();
-            videoRef.current?.pause();
-            active = false;
-         }
-      };
-
-      ttsSource.onended = () => {
-        ttsEnded = true;
-        finishRecording();
-      };
-
-      if (videoRef.current) {
-        videoRef.current.onended = () => {
-          videoEnded = true;
-          finishRecording();
-        };
-      }
-      
-      const checkInterval = setInterval(() => {
-          if (!active || !videoRef.current) {
-              clearInterval(checkInterval);
-              return;
+      // Calculate audio playback rate for FFmpeg (atempo)
+      if (Math.abs(speed - 1.0) > 0.02) {
+          // ffmpeg atempo filter works between 0.5 and 2.0. If we need more, we chain them.
+          let currentSpeed = speed;
+          let atempoChain = [];
+          while (currentSpeed > 2.0) {
+              atempoChain.push('atempo=2.0');
+              currentSpeed /= 2.0;
           }
-          
-          const isVideoDone = videoRef.current.ended || videoRef.current.currentTime >= videoRef.current.duration - 0.1;
-          
-          if (ttsEnded && isVideoDone) {
-              videoEnded = true;
-              finishRecording();
-              clearInterval(checkInterval);
+          while (currentSpeed < 0.5) {
+              atempoChain.push('atempo=0.5');
+              currentSpeed /= 0.5;
           }
-      }, 1000);
+          atempoChain.push(`atempo=${currentSpeed.toFixed(2)}`);
+          audioFilter += ',' + atempoChain.join(',');
+      }
 
+      await ffmpeg.exec([
+        '-i', 'input_vid.mp4',
+        '-i', 'input_aud.wav',
+        '-c:v', 'copy',
+        '-filter_complex', `[1:a]${audioFilter}[aout]`,
+        '-map', '0:v:0',
+        '-map', '[aout]',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-y',
+        'output.mp4'
+      ]);
+
+      const data = await ffmpeg.readFile('output.mp4');
+      const finalBlob = new Blob([data.buffer as Uint8Array], { type: 'video/mp4' });
+      
+      const url = URL.createObjectURL(finalBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${result.fileName || 'dubbed_video'}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
     } catch (e: any) {
-      console.error("Recording failed", e);
+      console.error("FFmpeg Recording failed", e);
+      alert("Yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko'ring (SharedArrayBuffer yo'qligi sababli bo'lishi mumkin).");
+    } finally {
       setIsRendering(false);
-      alert("Yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
     }
   };
 

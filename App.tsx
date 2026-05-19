@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import VideoUploader from './components/VideoUploader';
 import DubbingStudio from './components/DubbingStudio';
 import { analyzeAndTranslateVideo, generateSpeech } from './services/geminiService';
-import { ProcessStatus, DubbingResult, ProcessingError } from './types';
+import { ProcessStatus, DubbingResult, ProcessingError, UserData } from './types';
 import { auth } from './services/firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { initializeUser, getUserPlanData, consumeCredit, logDubbingHistory, upgradePlan } from './services/userService';
-import { LogIn, LogOut, Video, Coins, History, CreditCard } from 'lucide-react';
+import { initializeUser, getUserPlanData, consumeCredit, logDubbingHistory, upgradePlan, getAllUsers, updateUserAdmin } from './services/userService';
+import { LogIn, LogOut, Video, Coins, History, CreditCard, Users, ShieldAlert } from 'lucide-react';
 import { getDubbingHistory } from './services/userService';
+import { AdminAnalytics } from './components/AdminAnalytics';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<ProcessStatus>(ProcessStatus.IDLE);
@@ -23,12 +24,24 @@ const App: React.FC = () => {
   const [showBillingModal, setShowBillingModal] = useState<boolean>(false);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+  const [showAdminModal, setShowAdminModal] = useState<boolean>(false);
+  const [adminUsers, setAdminUsers] = useState<UserData[]>([]);
+  const [selectedPlanToBuy, setSelectedPlanToBuy] = useState<string | null>(null);
+  const isAdmin = user?.email === 'optimbazar@gmail.com';
 
   const loadHistory = async () => {
     if (user) {
       const logs = await getDubbingHistory();
       setHistoryLogs(logs);
       setShowHistoryModal(true);
+    }
+  };
+
+  const loadAdminData = async () => {
+    if (user && user.email === 'optimbazar@gmail.com') {
+      const users = await getAllUsers();
+      setAdminUsers(users as UserData[]);
+      setShowAdminModal(true);
     }
   };
 
@@ -214,6 +227,11 @@ const App: React.FC = () => {
                   <span className="text-sm font-medium text-gray-200">{credits}</span>
                 </div>
                 <div className="flex items-center gap-3">
+                  {isAdmin && (
+                    <button onClick={loadAdminData} className="text-gray-400 hover:text-white transition-colors" title="Boshqaruv">
+                      <ShieldAlert className="w-5 h-5" />
+                    </button>
+                  )}
                   <button onClick={loadHistory} className="text-gray-400 hover:text-white transition-colors" title="Tarix">
                     <History className="w-5 h-5" />
                   </button>
@@ -280,68 +298,111 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                   <CreditCard className="w-6 h-6 text-blue-400" /> Ta'rifni yangilash
                 </h2>
-                <button onClick={() => setShowBillingModal(false)} className="text-gray-400 hover:text-white">✕</button>
+                <button onClick={() => { setShowBillingModal(false); setSelectedPlanToBuy(null); }} className="text-gray-400 hover:text-white">✕</button>
               </div>
               <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Free Plan */}
-                  <div className={`p-6 rounded-xl border ${userPlan === 'free' ? 'border-blue-500 bg-blue-900/10 relative' : 'border-gray-700 bg-gray-900'}`}>
-                    {userPlan === 'free' && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-bold">Joriy ta'rif</span>}
-                    <h3 className="text-xl font-bold text-white mb-2">Free</h3>
-                    <p className="text-gray-400 text-sm mb-4">Loyiha bilan tanishish uchun</p>
-                    <div className="mb-6"><span className="text-3xl font-bold text-white">$0</span> <span className="text-gray-500">/ oy</span></div>
-                    <ul className="space-y-3 mb-6 text-sm text-gray-300">
-                      <li className="flex gap-2">✅ 3 ta dublyaj</li>
-                      <li className="flex gap-2">✅ Maksimal 1 daqiqa video</li>
-                      <li className="flex gap-2">❌ Tarixni saqlash</li>
-                      <li className="flex gap-2 text-gray-500">❌ 24/7 yordam</li>
-                    </ul>
-                    <button disabled className="w-full bg-gray-700 text-gray-400 py-2 rounded-lg font-medium">Boshlang'ich</button>
-                  </div>
+                {!selectedPlanToBuy ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* Free Plan */}
+                      <div className={`p-6 rounded-xl border ${userPlan === 'free' ? 'border-blue-500 bg-blue-900/10 relative' : 'border-gray-700 bg-gray-900'}`}>
+                        {userPlan === 'free' && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-bold">Joriy ta'rif</span>}
+                        <h3 className="text-xl font-bold text-white mb-2">Free</h3>
+                        <p className="text-gray-400 text-sm mb-4">Loyiha bilan tanishish uchun</p>
+                        <div className="mb-6"><span className="text-3xl font-bold text-white">0 so'm</span> <span className="text-gray-500">/ oy</span></div>
+                        <ul className="space-y-3 mb-6 text-sm text-gray-300">
+                          <li className="flex gap-2">✅ 3 ta dublyaj</li>
+                          <li className="flex gap-2">✅ Maksimal 1 daqiqa video</li>
+                          <li className="flex gap-2">❌ Tarixni saqlash</li>
+                          <li className="flex gap-2 text-gray-500">❌ 24/7 yordam</li>
+                        </ul>
+                        <button disabled className="w-full bg-gray-700 text-gray-400 py-2 rounded-lg font-medium">Boshlang'ich</button>
+                      </div>
 
-                  {/* Pro Plan */}
-                  <div className={`p-6 rounded-xl border relative shadow-blue-500/20 shadow-xl ${userPlan === 'pro' ? 'border-blue-500 bg-blue-900/10' : 'border-blue-500/30 bg-gray-800'}`}>
-                    {userPlan === 'pro' && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-bold">Joriy ta'rif</span>}
-                    {userPlan !== 'pro' && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs px-3 py-1 rounded-full font-bold">Tavsiya etamiz</span>}
-                    <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
-                    <p className="text-gray-400 text-sm mb-4">Aktiv foydalanuvchilar uchun</p>
-                    <div className="mb-6"><span className="text-3xl font-bold text-white">$9.99</span> <span className="text-gray-500">/ oy</span></div>
-                    <ul className="space-y-3 mb-6 text-sm text-gray-300">
-                      <li className="flex gap-2 font-medium text-blue-400">✅ 50 ta dublyaj</li>
-                      <li className="flex gap-2">✅ Maksimal 5 daqiqa video</li>
-                      <li className="flex gap-2">✅ Tarixni saqlash</li>
-                      <li className="flex gap-2">✅ Tezkor API xizmati</li>
-                    </ul>
-                    {userPlan === 'pro' ? (
-                       <button disabled className="w-full bg-gray-700 text-gray-400 py-2 rounded-lg font-medium">Faol</button>
-                    ) : (
-                       <button onClick={async () => { await upgradePlan('pro'); setUserPlan('pro'); setCredits(50); setShowBillingModal(false); }} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium transition-colors">Obuna bo'lish</button>
-                    )}
-                  </div>
+                      {/* Pro Plan */}
+                      <div className={`p-6 rounded-xl border relative shadow-blue-500/20 shadow-xl ${userPlan === 'pro' ? 'border-blue-500 bg-blue-900/10' : 'border-blue-500/30 bg-gray-800'}`}>
+                        {userPlan === 'pro' && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-bold">Joriy ta'rif</span>}
+                        {userPlan !== 'pro' && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs px-3 py-1 rounded-full font-bold">Tavsiya etamiz</span>}
+                        <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
+                        <p className="text-gray-400 text-sm mb-4">Aktiv foydalanuvchilar uchun</p>
+                        <div className="mb-6"><span className="text-3xl font-bold text-white">130 000 so'm</span> <span className="text-gray-500">/ oy</span></div>
+                        <ul className="space-y-3 mb-6 text-sm text-gray-300">
+                          <li className="flex gap-2 font-medium text-blue-400">✅ 50 ta dublyaj</li>
+                          <li className="flex gap-2">✅ Maksimal 5 daqiqa video</li>
+                          <li className="flex gap-2">✅ Tarixni saqlash</li>
+                          <li className="flex gap-2">✅ Tezkor API xizmati</li>
+                        </ul>
+                        {userPlan === 'pro' ? (
+                          <button disabled className="w-full bg-gray-700 text-gray-400 py-2 rounded-lg font-medium">Faol</button>
+                        ) : (
+                          <button onClick={() => setSelectedPlanToBuy('pro')} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium transition-colors">Obuna bo'lish</button>
+                        )}
+                      </div>
 
-                  {/* Creator Plan */}
-                  <div className={`p-6 rounded-xl border ${userPlan === 'creator' ? 'border-purple-500 bg-purple-900/10 relative' : 'border-gray-700 bg-gray-900'}`}>
-                    {userPlan === 'creator' && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-purple-500 text-white text-xs px-3 py-1 rounded-full font-bold">Joriy ta'rif</span>}
-                    <h3 className="text-xl font-bold text-white mb-2">Creator</h3>
-                    <p className="text-gray-400 text-sm mb-4">Bloger va agentliklar uchun</p>
-                    <div className="mb-6"><span className="text-3xl font-bold text-white">$29.99</span> <span className="text-gray-500">/ oy</span></div>
-                    <ul className="space-y-3 mb-6 text-sm text-gray-300">
-                      <li className="flex gap-2 font-medium text-purple-400">✅ 200 ta dublyaj</li>
-                      <li className="flex gap-2 font-medium">✅ Maksimal 10 daqiqa video</li>
-                      <li className="flex gap-2">✅ Cheksiz imkoniyatlar</li>
-                      <li className="flex gap-2">✅ 24/7 yordam & Shaxsiy API</li>
-                    </ul>
-                    {userPlan === 'creator' ? (
-                       <button disabled className="w-full bg-gray-700 text-gray-400 py-2 rounded-lg font-medium">Faol</button>
-                    ) : (
-                       <button onClick={async () => { await upgradePlan('creator'); setUserPlan('creator'); setCredits(200); setShowBillingModal(false); }} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-lg font-medium transition-colors">Obuna bo'lish</button>
-                    )}
-                  </div>
+                      {/* Creator Plan */}
+                      <div className={`p-6 rounded-xl border ${userPlan === 'creator' ? 'border-purple-500 bg-purple-900/10 relative' : 'border-gray-700 bg-gray-900'}`}>
+                        {userPlan === 'creator' && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-purple-500 text-white text-xs px-3 py-1 rounded-full font-bold">Joriy ta'rif</span>}
+                        <h3 className="text-xl font-bold text-white mb-2">Creator</h3>
+                        <p className="text-gray-400 text-sm mb-4">Bloger va agentliklar uchun</p>
+                        <div className="mb-6"><span className="text-3xl font-bold text-white">390 000 so'm</span> <span className="text-gray-500">/ oy</span></div>
+                        <ul className="space-y-3 mb-6 text-sm text-gray-300">
+                          <li className="flex gap-2 font-medium text-purple-400">✅ 200 ta dublyaj</li>
+                          <li className="flex gap-2 font-medium">✅ Maksimal 10 daqiqa video</li>
+                          <li className="flex gap-2">✅ Cheksiz imkoniyatlar</li>
+                          <li className="flex gap-2">✅ 24/7 yordam & Shaxsiy API</li>
+                        </ul>
+                        {userPlan === 'creator' ? (
+                          <button disabled className="w-full bg-gray-700 text-gray-400 py-2 rounded-lg font-medium">Faol</button>
+                        ) : (
+                          <button onClick={() => setSelectedPlanToBuy('creator')} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-lg font-medium transition-colors">Obuna bo'lish</button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="max-w-2xl mx-auto bg-gray-900 border border-gray-700 p-8 rounded-xl text-center">
+                    <h3 className="text-2xl font-bold text-white mb-4">
+                      {selectedPlanToBuy === 'pro' ? 'Pro' : 'Creator'} ta'rifini xarid qilish
+                    </h3>
+                    <p className="text-gray-300 mb-6">
+                      Iltimos, to'lovni tasdiqlash uchun quyidagi amallarni bajaring:
+                    </p>
+                    
+                    <div className="space-y-6 text-left">
+                      <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                        <div className="flex gap-3 items-start">
+                          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shrink-0">1</div>
+                          <div>
+                            <h4 className="text-white font-semibold mb-1">Paynet orqali to'lovni amalga oshiring</h4>
+                            <p className="text-sm text-gray-400 mb-3">Quyidagi havola orqali kerakli summani to'lang (Pro - 130 000 so'm, Creator - 390 000 so'm).</p>
+                            <a href="https://app.paynet.uz/?m=49156&i=4805742d-d76c-4b39-8c02-8ddf1c450f33&branchId=&actTypeId=144" target="_blank" rel="noopener noreferrer" className="inline-block bg-[#00b2a3] hover:bg-[#009285] text-white px-4 py-2 rounded font-medium transition-colors">
+                              Paynet da to'lash
+                            </a>
+                          </div>
+                        </div>
+                      </div>
 
-                </div>
-                <div className="mt-6 text-center text-xs text-gray-500">
-                  <p>Hozirgi to'lov tizimlari test rejimida. "Obuna bo'lish" tugmasi hisobingizga test obunasini faollashtiradi.</p>
-                </div>
+                      <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                        <div className="flex gap-3 items-start">
+                          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shrink-0">2</div>
+                          <div>
+                            <h4 className="text-white font-semibold mb-1">Admin tasdiqlashi uchun chekni yuboring</h4>
+                            <p className="text-sm text-gray-400 mb-3">To'lov muvaffaqiyatli o'tgach, to'lov chekini va elektron pochtangizni (<strong>{user?.email}</strong>) adminga yuboring.</p>
+                            <a href="https://t.me/Akramjon1984" target="_blank" rel="noopener noreferrer" className="inline-block bg-[#0088cc] hover:bg-[#0077b3] text-white px-4 py-2 rounded font-medium transition-colors">
+                              Telegram orqali yuborish
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 pt-6 border-t border-gray-800">
+                      <button onClick={() => setSelectedPlanToBuy(null)} className="text-gray-400 hover:text-white transition-colors">
+                        &larr; Orqaga qaytish
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -374,6 +435,67 @@ const App: React.FC = () => {
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Admin Modal */}
+        {showAdminModal && isAdmin && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-800 rounded-2xl p-6 max-w-4xl w-full border border-gray-700 shadow-2xl flex flex-col max-h-[80vh] animate-fade-in-up">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-red-400" /> Boshqaruv Paneli
+                </h2>
+                <button onClick={() => setShowAdminModal(false)} className="text-gray-400 hover:text-white">✕</button>
+              </div>
+              <div className="flex-1 overflow-y-auto pr-2">
+                <AdminAnalytics users={adminUsers} />
+                <table className="w-full text-left text-sm text-gray-300">
+                  <thead className="text-xs text-gray-400 uppercase bg-gray-900 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3">Email</th>
+                      <th className="px-4 py-3">Turi</th>
+                      <th className="px-4 py-3">Ruxsat (Plan)</th>
+                      <th className="px-4 py-3">Urinishlar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminUsers.map(u => (
+                      <tr key={u.uid} className="border-b border-gray-700 hover:bg-gray-700/50">
+                        <td className="px-4 py-3 font-medium text-white">{u.email}</td>
+                        <td className="px-4 py-3">
+                          <select className="bg-gray-800 border border-gray-600 text-white rounded p-1" value={u.role || 'user'} onChange={async (e) => {
+                            await updateUserAdmin(u.uid!, { role: e.target.value });
+                            await loadAdminData();
+                          }}>
+                            <option value="user">Foydalanuvchi</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-3">
+                           <select className="bg-gray-800 border border-gray-600 text-white rounded p-1" value={u.plan || 'free'} onChange={async (e) => {
+                            await updateUserAdmin(u.uid!, { plan: e.target.value });
+                            await loadAdminData();
+                          }}>
+                            <option value="free">Bepul</option>
+                            <option value="pro">Pro</option>
+                            <option value="creator">Ijodkor</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-3 flex gap-2 items-center">
+                          <input type="number" className="w-20 bg-gray-800 border border-gray-600 text-white rounded p-1" defaultValue={u.credits} onBlur={async (e) => {
+                             if(parseInt(e.target.value) !== u.credits) {
+                               await updateUserAdmin(u.uid!, { credits: parseInt(e.target.value) || 0 });
+                               await loadAdminData();
+                             }
+                          }}/>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
