@@ -124,15 +124,15 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled, u
   };
 
   return (
-    <div className="w-full max-w-xl mx-auto mb-8">
+    <div className="w-full max-w-xl mx-auto mb-8 animate-fade-in-up">
       {/* Tabs */}
-      <div className="flex mb-4 bg-gray-800 rounded-lg p-1 border border-gray-700">
+      <div className="flex mb-5 bg-white/5 rounded-2xl p-1 border border-white/5">
         <button
           onClick={() => { setActiveTab('file'); setError(null); }}
           disabled={disabled}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+          className={`flex-1 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all duration-200 ${
             activeTab === 'file' 
-              ? 'bg-gray-700 text-white shadow-sm' 
+              ? 'bg-white/10 text-white shadow-sm border border-white/5' 
               : 'text-gray-400 hover:text-gray-200'
           }`}
         >
@@ -141,9 +141,9 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled, u
         <button
           onClick={() => { setActiveTab('url'); setError(null); }}
           disabled={disabled}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+          className={`flex-1 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all duration-200 ${
             activeTab === 'url' 
-              ? 'bg-gray-700 text-white shadow-sm' 
+              ? 'bg-white/10 text-white shadow-sm border border-white/5' 
               : 'text-gray-400 hover:text-gray-200'
           }`}
         >
@@ -156,20 +156,24 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled, u
         <label 
           htmlFor="video-upload" 
           className={`
-            flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer 
-            transition-colors duration-300
+            flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-3xl cursor-pointer 
+            transition-all duration-300 group
             ${disabled 
-              ? 'border-gray-600 bg-gray-800 opacity-50 cursor-not-allowed' 
-              : 'border-blue-500 bg-gray-800 hover:bg-gray-750 hover:border-blue-400'}
+              ? 'border-white/5 bg-white/[0.01] opacity-50 cursor-not-allowed' 
+              : 'border-indigo-500/30 bg-white/[0.02] hover:bg-white/[0.04] hover:border-indigo-500/50'}
           `}
         >
-          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-            <svg className="w-12 h-12 mb-4 text-blue-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
-            </svg>
-            <p className="mb-2 text-sm text-gray-300"><span className="font-semibold">Video yuklash uchun bosing</span></p>
-            <p className="text-xs text-gray-400">MP4, MOV</p>
-            <p className="text-xs text-yellow-500 mt-2">Tarifingiz bo'yicha limit: {limits.name}</p>
+          <div className="flex flex-col items-center justify-center pt-5 pb-6 px-4 text-center">
+            <div className="w-14 h-14 bg-indigo-500/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+              <svg className="w-6 h-6 text-indigo-400 group-hover:animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+            </div>
+            <p className="mb-1 text-sm font-bold text-white">Video yuklash uchun bosing</p>
+            <p className="text-xs text-gray-500">MP4, MOV formatlarida</p>
+            <span className="text-[10px] sm:text-xs font-bold text-yellow-500/80 bg-yellow-500/5 border border-yellow-500/10 rounded-full px-3 py-1 mt-4">
+              Tarifingiz bo'yicha limit: {limits.name}
+            </span>
           </div>
           <input 
             id="video-upload" 
@@ -184,19 +188,19 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled, u
       
       {/* Show duration error if any */}
       {activeTab === 'file' && durationError && (
-          <div className="mt-4 p-3 text-sm text-red-200 bg-red-900/30 border border-red-800/50 rounded-lg">
+          <div className="mt-4 p-3.5 text-xs sm:text-sm text-red-200 bg-red-500/10 border border-red-500/20 rounded-2xl animate-shake">
             <span className="font-bold">Xatolik:</span> {durationError}
           </div>
       )}
 
       {/* Tab Content: URL Upload */}
       {activeTab === 'url' && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 flex flex-col justify-center">
+        <div className="glass-panel rounded-3xl p-5 sm:p-6 flex flex-col justify-center border border-white/5">
           <div className="w-full">
-            <label htmlFor="url-input" className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="url-input" className="block text-xs font-bold text-gray-400 mb-2.5 uppercase tracking-wider">
               Video Linki (MP4)
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 id="url-input"
                 type="url"
@@ -204,14 +208,14 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled, u
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={disabled || isLoading}
-                className="flex-1 bg-gray-900 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 placeholder-gray-500"
+                className="flex-1 bg-gray-950 border border-white/10 text-white text-xs sm:text-sm rounded-xl focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none block p-3 placeholder-gray-650"
               />
               <button
                 onClick={handleUrlSubmit}
                 disabled={disabled || isLoading || !url}
                 className={`
-                  text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-800 font-medium rounded-lg text-sm px-5 py-2.5 text-center
-                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center
+                  text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-bold rounded-xl text-xs sm:text-sm px-6 py-3 text-center
+                  disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98] flex items-center justify-center min-w-[100px]
                 `}
               >
                 {isLoading ? (
@@ -226,24 +230,24 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onFileSelect, disabled, u
             </div>
 
             {error && (
-              <div className="mt-4 p-3 text-sm text-red-200 bg-red-900/30 border border-red-800/50 rounded-lg">
+              <div className="mt-4 p-3.5 text-xs sm:text-sm text-red-205 bg-red-500/10 border border-red-500/20 rounded-2xl animate-shake">
                 <span className="font-bold">Xatolik:</span> {error}
               </div>
             )}
 
-            <div className="mt-6 p-4 bg-gray-700/30 rounded-lg border border-gray-600/50">
-               <h4 className="text-sm font-semibold text-blue-300 mb-2 flex items-center gap-2">
-                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div className="mt-6 p-4 bg-indigo-500/5 rounded-2xl border border-indigo-500/10">
+               <h4 className="text-xs sm:text-sm font-bold text-indigo-300 mb-2 flex items-center gap-2">
+                 <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                  Instagram yoki YouTube?
                </h4>
-               <p className="text-xs text-gray-400 mb-2 leading-relaxed">
-                 Afsuski, Instagram va YouTube xavfsizlik (CORS) tufayli havolani to'g'ridan-to'g'ri qabul qilmaydi.
+               <p className="text-[11px] sm:text-xs text-gray-400 mb-3.5 leading-relaxed">
+                 Afsuski, Instagram va YouTube xavfsizlik (CORS) cheklovlari tufayli videolarni to'g'ridan-to'g'ri bu yerga yuklashga ruxsat bermaydi.
                </p>
-               <div className="text-xs text-gray-300">
-                 <span className="block mb-1">Tavsiya etilgan usul:</span>
-                 <ol className="list-decimal list-inside space-y-1 pl-1">
-                   <li>Videoni <a href="https://snapinsta.app/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">SnapInsta</a> kabi saytlardan yuklab oling.</li>
-                   <li>"Fayl Yuklash" bo'limi orqali yuklang.</li>
+               <div className="text-[11px] sm:text-xs text-gray-300 bg-black/20 p-3 rounded-xl border border-white/5">
+                 <span className="block mb-1.5 font-semibold text-white">Tavsiya etilgan usul:</span>
+                 <ol className="list-decimal list-inside space-y-1.5 pl-0.5">
+                   <li>Videoni <a href="https://snapinsta.app/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline font-medium">SnapInsta</a> kabi bepul sayt orqali qurilmangizga yuklab oling.</li>
+                   <li>Uni yuqoridagi <span className="font-semibold text-white">"Fayl Yuklash"</span> bo'limi orqali kiriting.</li>
                  </ol>
                </div>
             </div>
