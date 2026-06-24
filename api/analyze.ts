@@ -1,11 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-import admin from 'firebase-admin';
+import { getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 
 // Initialize Firebase Admin (only project ID needed for token verification)
 const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'ornate-loader-471914-h0';
-if (!admin.apps.length) {
-  admin.initializeApp({
+if (!getApps().length) {
+  initializeApp({
     projectId: projectId,
   });
 }
@@ -36,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const token = authHeader.split('Bearer ')[1];
   try {
-    await admin.auth().verifyIdToken(token);
+    await getAuth().verifyIdToken(token);
   } catch (err: any) {
     console.error('Token verification failed:', err);
     return res.status(401).json({ error: 'Seans muddati tugagan yoki xato token.' });
@@ -73,7 +74,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const blob = new Blob([videoBuffer], { type: actualMimeType });
     const file = await ai.files.upload({
       file: blob,
-      mimeType: actualMimeType,
+      config: {
+        mimeType: actualMimeType,
+      }
     });
 
     console.log(`Video uploaded to Gemini. File URI: ${file.uri}`);
