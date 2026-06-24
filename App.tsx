@@ -3,7 +3,8 @@ import VideoUploader from './components/VideoUploader';
 import DubbingStudio from './components/DubbingStudio';
 import { analyzeAndTranslateVideo, generateSpeech } from './services/geminiService';
 import { ProcessStatus, DubbingResult, ProcessingError, UserData } from './types';
-import { auth } from './services/firebase';
+import { auth, storage } from './services/firebase';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { initializeUser, getUserPlanData, consumeCredit, logDubbingHistory, upgradePlan, getAllUsers, updateUserAdmin } from './services/userService';
 import { LogIn, LogOut, Video, Coins, History, CreditCard, Users, ShieldAlert } from 'lucide-react';
@@ -15,6 +16,7 @@ const App: React.FC = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [result, setResult] = useState<DubbingResult | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   // Authentication State
   const [user, setUser] = useState<User | null>(null);
@@ -108,19 +110,69 @@ const App: React.FC = () => {
   };
 
   const handleFileSelect = async (file: File) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
     setVideoFile(file);
     setStatus(ProcessStatus.ANALYZING);
     setError(null);
+    setUploadProgress(0);
+
+    let storageRefStr = '';
+    let downloadUrl = '';
 
     try {
       // Step 0: Get Video Duration
       const duration = await getVideoDuration(file);
       console.log(`Video duration detected: ${duration} seconds`);
 
-      // Step 1: Analyze and Translate
-      // Need to adjust analyzeAndTranslateVideo to accept targetLanguage if we want full support.
-      const analysis = await analyzeAndTranslateVideo(file, duration, targetLanguage);
+      // Step 0.5: Upload video to Firebase Storage
+      const timestamp = Date.now();
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+      storageRefStr = `uploads/${user.uid}/${timestamp}_${cleanFileName}`;
+      const storageRef = ref(storage, storageRefStr);
       
+      console.log(`Uploading file to Firebase Storage: ${storageRefStr}...`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      // Wrap upload task in a promise to await completion
+      await new Promise<void>((resolve, reject) => {
+        uploadTask.on('state_changed', 
+          (snapshot) => {
+            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+            setUploadProgress(progress);
+          }, 
+          (err) => {
+            reject(err);
+          }, 
+          async () => {
+            try {
+              downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          }
+        );
+      });
+
+      // Clear progress indicator as upload finished, transition to AI analysis
+      setUploadProgress(null);
+
+      // Step 1: Analyze and Translate via serverless API
+      // We pass the downloadUrl instead of the File object
+      const analysis = await analyzeAndTranslateVideo(downloadUrl, duration, targetLanguage, file.type);
+      
+      // Clean up the file from Firebase Storage immediately after successful analysis
+      console.log(`Cleaning up file from Firebase Storage: ${storageRefStr}...`);
+      try {
+        await deleteObject(ref(storage, storageRefStr));
+      } catch (cleanupErr) {
+        console.warn("Failed to delete Firebase Storage temporary file:", cleanupErr);
+      }
+
       // Save data and move to Review step
       setTempData(analysis);
       setEditableText(analysis.translatedText);
@@ -128,6 +180,16 @@ const App: React.FC = () => {
       setStatus(ProcessStatus.REVIEWING);
 
     } catch (err: any) {
+      // If error occurs, clean up the file from Firebase Storage if it was uploaded
+      if (storageRefStr) {
+        console.log(`Cleaning up file from Firebase Storage after error: ${storageRefStr}...`);
+        try {
+          await deleteObject(ref(storage, storageRefStr));
+        } catch (cleanupErr) {
+          console.warn("Failed to clean up Firebase Storage file after error:", cleanupErr);
+        }
+      }
+      setUploadProgress(null);
       handleError(err);
     }
   };
@@ -579,11 +641,15 @@ const App: React.FC = () => {
               <div className="absolute inset-0 w-14 h-14 bg-indigo-500/5 blur-md rounded-full animate-pulse-glow"></div>
             </div>
             <h3 className="text-lg sm:text-xl font-bold text-white mb-2 tracking-tight">
-              {status === ProcessStatus.ANALYZING ? "Video tahlil qilinmoqda..." : "Ovoz yaratilmoqda..."}
+              {status === ProcessStatus.ANALYZING 
+                ? (uploadProgress !== null ? `Video yuklanmoqda... ${uploadProgress}%` : "Video tahlil qilinmoqda...") 
+                : "Ovoz yaratilmoqda..."}
             </h3>
             <p className="text-gray-450 text-xs sm:text-sm text-center max-w-sm leading-relaxed">
               {status === ProcessStatus.ANALYZING 
-                ? `Original nutq aniqlanib, '${targetLanguage}' tiliga o'girilmoqda. Iltimos kuting...` 
+                ? (uploadProgress !== null 
+                    ? "Video fayli serverga xavfsiz tarzda uzatilmoqda, iltimos kuting..." 
+                    : `Original nutq aniqlanib, '${targetLanguage}' tiliga o'girilmoqda. Iltimos kuting...`) 
                 : "Tarjima audio formatga o'tkazilmoqda."}
             </p>
           </div>

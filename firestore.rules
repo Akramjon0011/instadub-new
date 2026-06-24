@@ -63,12 +63,18 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && (
           (
+            // Oddiy foydalanuvchi: faqat kreditni 1 ga kamaytirishi mumkin
+            // plan, role, email o'zgartira OLMAYDI
             isOwner(userId)
             && request.auth.token.email != 'optimbazar@gmail.com'
             && incoming().email == existing().email
             && incoming().role == existing().role
-            && incoming().diff(existing()).affectedKeys().hasOnly(['credits', 'plan', 'updatedAt'])
+            && incoming().plan == existing().plan
+            && incoming().diff(existing()).affectedKeys().hasOnly(['credits', 'updatedAt'])
+            && incoming().credits == existing().credits - 1
+            && incoming().credits >= 0
           ) || (
+            // Admin: barcha maydonlarni o'zgartira oladi
             request.auth.token.email == 'optimbazar@gmail.com'
           )
         );

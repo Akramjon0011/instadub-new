@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, updateDoc, collection, serverTimestamp, getDocs, query, orderBy } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, serverTimestamp, getDocs, query, orderBy, runTransaction } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
 
 export const initializeUser = async () => {
@@ -27,10 +27,9 @@ export const initializeUser = async () => {
         });
       }
     } else if (!snap.data().plan) {
-       await updateDoc(userRef, {
-          plan: 'free',
-          updatedAt: serverTimestamp()
-        });
+       // Eski foydalanuvchida 'plan' maydoni yo'q — admin orqali tuzatish kerak.
+       // Yangi Firestore rules bo'yicha oddiy foydalanuvchi plan ni o'zgartira olmaydi.
+       console.warn(`Foydalanuvchi ${auth.currentUser.uid} da 'plan' maydoni yo'q. Admin orqali tuzating.`);
     }
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, 'users/{userId}');
@@ -53,8 +52,14 @@ export const getUserPlanData = async (): Promise<{credits: number, plan: string}
   }
 };
 
+// DIQQAT: upgradePlan faqat admin tomonidan chaqirilishi mumkin.
+// Oddiy foydalanuvchi o'z planini o'zgartira olmaydi (Firestore rules bilan himoyalangan).
 export const upgradePlan = async (newPlan: 'pro' | 'creator') => {
   if (!auth.currentUser) throw new Error("Sahifaga kiring");
+  // Faqat admin uchun ishlaydi
+  if (auth.currentUser.email !== 'optimbazar@gmail.com') {
+    throw new Error("Plan o'zgartirish faqat admin tomonidan amalga oshiriladi. Iltimos, admin bilan bog'laning.");
+  }
   const userRef = doc(db, 'users', auth.currentUser.uid);
   try {
       const creditsToAdd = newPlan === 'pro' ? 50 : 200;
@@ -67,21 +72,27 @@ export const upgradePlan = async (newPlan: 'pro' | 'creator') => {
      handleFirestoreError(err, OperationType.UPDATE, 'users/{userId}');
   }
 };
+
+// Transaction orqali kredit kamaytirish — race condition oldini oladi.
+// Bir vaqtda 2 ta so'rov kelsa ham, faqat bitta muvaffaqiyatli bo'ladi.
 export const consumeCredit = async () => {
   if (!auth.currentUser) throw new Error("Sahifaga kiring");
   const userRef = doc(db, 'users', auth.currentUser.uid);
   try {
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      const credits = snap.data().credits;
-      if (credits <= 0) {
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(userRef);
+      if (!snap.exists()) {
+        throw new Error("Foydalanuvchi topilmadi.");
+      }
+      const currentCredits = snap.data().credits;
+      if (currentCredits <= 0) {
         throw new Error("Sizda bepul urinishlar qolmadi. Iltimos, obunani yangilang.");
       }
-      await updateDoc(userRef, {
-        credits: credits - 1,
+      transaction.update(userRef, {
+        credits: currentCredits - 1,
         updatedAt: serverTimestamp()
       });
-    }
+    });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, 'users/{userId}');
   }

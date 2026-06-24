@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBbXdw0_EgEGIit8FkaZ_oZ5NxLK9lD0RM",
@@ -16,6 +17,7 @@ const app = initializeApp(firebaseConfig);
 const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || "ai-studio-157ea605-c159-4711-a4c4-701f821fb861";
 export const db = getFirestore(app, databaseId);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 export enum OperationType {
   CREATE = 'create',
