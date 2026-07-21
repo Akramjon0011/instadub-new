@@ -157,63 +157,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       5. **TOPIC:** Create a file-safe slug describing the topic.
     `;
 
-    console.log(`Generating content using gemini-2.0-flash...`);
+    console.log(`Generating content with 2026 models chain (gemini-2.5-flash -> gemini-2.0-flash -> gemini-1.5-flash)...`);
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     let response;
-    try {
-      response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { fileData: { fileUri: file.uri, mimeType: file.mimeType } },
-              { text: prompt }
-            ]
+    let lastErr;
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(`Attempting model: ${modelName}...`);
+        response = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { fileData: { fileUri: file.uri, mimeType: file.mimeType } },
+                { text: prompt }
+              ]
+            }
+          ],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: {
+                source_language: { type: 'STRING', description: "The native language of the video (e.g., 'Uzbek', 'English')" },
+                original_transcription: { type: 'STRING', description: "Transcription of the original audio in its native language" },
+                translated_script: { type: 'STRING', description: `The adapted, rich, and context-aware script perfectly translated into ${actualTargetLanguage}` },
+                topic_slug: { type: 'STRING', description: "short_topic_name" },
+                recommended_voice: { type: 'STRING', description: "VoiceName: Male (Fenrir, Charon, Puck, Orpheus, Aoede, Zephyr) or Female (Kore, Leda, Callisto, Evadne, Amalthea, Despina)" }
+              },
+              required: ["source_language", "original_transcription", "translated_script", "topic_slug", "recommended_voice"]
+            }
           }
-        ],
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              source_language: { type: 'STRING', description: "The native language of the video (e.g., 'Uzbek', 'English')" },
-              original_transcription: { type: 'STRING', description: "Transcription of the original audio in its native language" },
-              translated_script: { type: 'STRING', description: `The adapted, rich, and context-aware script perfectly translated into ${actualTargetLanguage}` },
-              topic_slug: { type: 'STRING', description: "short_topic_name" },
-              recommended_voice: { type: 'STRING', description: "VoiceName: Male (Fenrir, Charon, Puck, Orpheus, Aoede, Zephyr) or Female (Kore, Leda, Callisto, Evadne, Amalthea, Despina)" }
-            },
-            required: ["source_language", "original_transcription", "translated_script", "topic_slug", "recommended_voice"]
-          }
+        });
+        if (response) {
+          console.log(`Successfully generated content using ${modelName}`);
+          break;
         }
-      });
-    } catch (modelErr) {
-      console.warn("gemini-2.0-flash failed, falling back to gemini-1.5-flash:", modelErr);
-      response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { fileData: { fileUri: file.uri, mimeType: file.mimeType } },
-              { text: prompt }
-            ]
-          }
-        ],
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              source_language: { type: 'STRING', description: "The native language of the video (e.g., 'Uzbek', 'English')" },
-              original_transcription: { type: 'STRING', description: "Transcription of the original audio in its native language" },
-              translated_script: { type: 'STRING', description: `The adapted, rich, and context-aware script perfectly translated into ${actualTargetLanguage}` },
-              topic_slug: { type: 'STRING', description: "short_topic_name" },
-              recommended_voice: { type: 'STRING', description: "VoiceName: Male (Fenrir, Charon, Puck, Orpheus, Aoede, Zephyr) or Female (Kore, Leda, Callisto, Evadne, Amalthea, Despina)" }
-            },
-            required: ["source_language", "original_transcription", "translated_script", "topic_slug", "recommended_voice"]
-          }
-        }
-      });
+      } catch (err) {
+        console.warn(`Model ${modelName} attempt failed:`, err);
+        lastErr = err;
+      }
+    }
+
+    if (!response) {
+      throw lastErr || new Error("AI Studio / Vertex AI modellari javob bermadi.");
     }
 
     // 7. Clean up file in Gemini File API
