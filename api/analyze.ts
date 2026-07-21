@@ -111,22 +111,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error("Video hajmi 25MB dan oshmasligi kerak.");
     }
 
-    // 4. Initialize Gemini API Client via Vertex AI
+    // 4. Initialize Gemini API Client
     const ai = getAI("global");
+    const base64Video = videoBuffer.toString('base64');
 
-    // 5. Upload video to Gemini File API
-    console.log(`Uploading video buffer to Gemini File API (size: ${videoBuffer.length} bytes)...`);
-    const blob = new Blob([videoBuffer], { type: actualMimeType });
-    const file = await ai.files.upload({
-      file: blob,
-      config: {
-        mimeType: actualMimeType,
-      }
-    });
-
-    console.log(`Video uploaded to Gemini. File URI: ${file.uri}`);
-
-    // 6. Request translation and transcription
+    // 5. Request translation and transcription
     const targetWordCount = Math.max(5, Math.ceil(duration * 2.2));
     const prompt = `
       You are a professional Content Localizer and Dubbing Director.
@@ -178,7 +167,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             {
               role: 'user',
               parts: [
-                { fileData: { fileUri: file.uri, mimeType: file.mimeType } },
+                { inlineData: { mimeType: actualMimeType, data: base64Video } },
                 { text: prompt }
               ]
             }
@@ -223,14 +212,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!response) {
       throw lastErr || new Error("AI Studio / Vertex AI modellari javob bermadi.");
-    }
-
-    // 7. Clean up file in Gemini File API
-    try {
-      console.log(`Cleaning up file ${file.name} from Gemini File API...`);
-      await ai.files.delete({ name: file.name });
-    } catch (cleanupErr) {
-      console.warn("Failed to delete Gemini temporary file:", cleanupErr);
     }
 
     const text = response.text;
