@@ -2,7 +2,7 @@ import { decodeAudioData } from "../utils/audioUtils";
 import { auth } from "./firebase";
 
 export const analyzeAndTranslateVideo = async (
-  videoUrl: string,
+  videoInput: { videoUrl?: string; videoBase64?: string },
   duration: number,
   targetLanguage: string = "O'zbek",
   mimeType: string = "video/mp4"
@@ -13,7 +13,7 @@ export const analyzeAndTranslateVideo = async (
     throw new Error("Sahifaga kiring: Dublyaj qilish uchun tizimga kirgan bo'lishingiz shart.");
   }
 
-  console.log(`Sending video URL to backend proxy for translation: ${videoUrl}`);
+  console.log(`Sending video to backend proxy for translation...`);
 
   const response = await fetch('/api/analyze', {
     method: 'POST',
@@ -22,7 +22,8 @@ export const analyzeAndTranslateVideo = async (
       'Authorization': `Bearer ${idToken}`
     },
     body: JSON.stringify({
-      videoUrl,
+      videoUrl: videoInput.videoUrl,
+      videoBase64: videoInput.videoBase64,
       duration,
       targetLanguage,
       mimeType

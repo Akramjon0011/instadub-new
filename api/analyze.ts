@@ -83,32 +83,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 2. Parse request body
-  const { videoUrl, duration, targetLanguage, mimeType } = req.body;
-  if (!videoUrl || !duration) {
-    return res.status(400).json({ error: "Noto'g'ri so'rov: videoUrl va duration kiritilishi shart." });
+  const { videoUrl, videoBase64, duration, targetLanguage, mimeType } = req.body;
+  if ((!videoUrl && !videoBase64) || !duration) {
+    return res.status(400).json({ error: "Noto'g'ri so'rov: video va duration kiritilishi shart." });
   }
 
   const actualTargetLanguage = targetLanguage || "O'zbek";
   const actualMimeType = mimeType || 'video/mp4';
 
   try {
-    // 3. Download the video from Firebase Storage
-    console.log(`Downloading video from storage: ${videoUrl}`);
-    const downloadResponse = await fetch(videoUrl);
-    if (!downloadResponse.ok) {
-      throw new Error(`Video yuklab olishda xatolik yuz berdi. Status: ${downloadResponse.status}`);
+    let videoBuffer: Buffer;
+
+    if (videoBase64) {
+      console.log("Processing direct videoBase64 payload...");
+      videoBuffer = Buffer.from(videoBase64, 'base64');
+    } else {
+      console.log(`Downloading video from storage: ${videoUrl}`);
+      const downloadResponse = await fetch(videoUrl);
+      if (!downloadResponse.ok) {
+        throw new Error(`Video yuklab olishda xatolik yuz berdi. Status: ${downloadResponse.status}`);
+      }
+      const arrayBuffer = await downloadResponse.arrayBuffer();
+      videoBuffer = Buffer.from(arrayBuffer);
     }
 
-    const contentLength = downloadResponse.headers.get('content-length');
-    if (contentLength && parseInt(contentLength) > 25 * 1024 * 1024) {
-      throw new Error("Video hajmi 25MB dan oshmasligi kerak (Vercel memory limit).");
-    }
-
-    const arrayBuffer = await downloadResponse.arrayBuffer();
-    const videoBuffer = Buffer.from(arrayBuffer);
-    
     if (videoBuffer.length > 25 * 1024 * 1024) {
-      throw new Error("Video hajmi 25MB dan oshmasligi kerak.");
+      throw new Error("Video hajmi 25MB dan oshmasligi kerak (Vercel limit).");
     }
 
     // 4. Initialize Gemini API Client

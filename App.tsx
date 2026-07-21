@@ -5,11 +5,12 @@ import { analyzeAndTranslateVideo, generateSpeech } from './services/geminiServi
 import { ProcessStatus, DubbingResult, ProcessingError, UserData } from './types';
 import { auth, storage } from './services/firebase';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { initializeUser, getUserPlanData, consumeCredit, logDubbingHistory, upgradePlan, getAllUsers, updateUserAdmin } from './services/userService';
 import { LogIn, LogOut, Video, Coins, History, CreditCard, Users, ShieldAlert } from 'lucide-react';
 import { getDubbingHistory } from './services/userService';
 import { AdminAnalytics } from './components/AdminAnalytics';
+import { fileToGenerativePart } from './utils/audioUtils';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<ProcessStatus>(ProcessStatus.IDLE);
@@ -123,14 +124,22 @@ const App: React.FC = () => {
   const handleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (popupErr: any) {
+        if (popupErr?.code === 'auth/popup-blocked' || popupErr?.code === 'auth/popup-closed-by-user') {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        throw popupErr;
+      }
       setShowAuthModal(false);
     } catch (err: any) {
       console.error("Login failed", err);
       if (err?.code === 'auth/unauthorized-domain') {
-        setError({ message: "Firebase xatosi: Sizning Vercel domeningiz Firebase 'Authorized domains' ro'yxatida yo'q. Loyiha sozlamalarini to'g'rilang." });
+        setError({ message: "Firebase xatosi: Sizning Vercel domeningiz Firebase 'Authorized domains' ro'yxatida yo'q. Iltimos 1 daqiqa kuting yoki sahifani yangilang (Ctrl+F5)." });
       } else {
-        setError({ message: "Tizimga kirishda xatolik: " + err?.message });
+        setError({ message: "Tizimga kirishda xatolik: " + (err?.message || err?.code) });
       }
       setStatus(ProcessStatus.ERROR);
     }
@@ -150,77 +159,34 @@ const App: React.FC = () => {
     setVideoFile(file);
     setStatus(ProcessStatus.ANALYZING);
     setError(null);
-    setUploadProgress(0);
-
-    let storageRefStr = '';
-    let downloadUrl = '';
+    setUploadProgress(20);
 
     try {
       // Step 0: Get Video Duration
       const duration = await getVideoDuration(file);
       console.log(`Video duration detected: ${duration} seconds`);
+      setUploadProgress(60);
 
-      // Step 0.5: Upload video to Firebase Storage
-      const timestamp = Date.now();
-      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
-      storageRefStr = `uploads/${user.uid}/${timestamp}_${cleanFileName}`;
-      const storageRef = ref(storage, storageRefStr);
-      
-      console.log(`Uploading file to Firebase Storage: ${storageRefStr}...`);
-      const uploadTask = uploadBytesResumable(storageRef, file);
-
-      // Wrap upload task in a promise to await completion
-      await new Promise<void>((resolve, reject) => {
-        uploadTask.on('state_changed', 
-          (snapshot) => {
-            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-            setUploadProgress(progress);
-          }, 
-          (err) => {
-            reject(err);
-          }, 
-          async () => {
-            try {
-              downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          }
-        );
-      });
-
-      // Clear progress indicator as upload finished, transition to AI analysis
-      setUploadProgress(null);
+      // Step 0.5: Convert video file directly to Base64 payload
+      console.log("Preparing video payload for direct AI analysis...");
+      const generativePart = await fileToGenerativePart(file);
+      setUploadProgress(100);
 
       // Step 1: Analyze and Translate via serverless API
-      // We pass the downloadUrl instead of the File object
-      const analysis = await analyzeAndTranslateVideo(downloadUrl, duration, targetLanguage, file.type);
-      
-      // Clean up the file from Firebase Storage immediately after successful analysis
-      console.log(`Cleaning up file from Firebase Storage: ${storageRefStr}...`);
-      try {
-        await deleteObject(ref(storage, storageRefStr));
-      } catch (cleanupErr) {
-        console.warn("Failed to delete Firebase Storage temporary file:", cleanupErr);
-      }
+      setUploadProgress(null);
+      const analysis = await analyzeAndTranslateVideo(
+        { videoBase64: generativePart.inlineData.data },
+        duration,
+        targetLanguage,
+        file.type
+      );
 
       // Save data and move to Review step
       setTempData(analysis);
       setEditableText(analysis.translatedText);
       setSelectedVoice(analysis.recommendedVoice);
       setStatus(ProcessStatus.REVIEWING);
-
     } catch (err: any) {
-      // If error occurs, clean up the file from Firebase Storage if it was uploaded
-      if (storageRefStr) {
-        console.log(`Cleaning up file from Firebase Storage after error: ${storageRefStr}...`);
-        try {
-          await deleteObject(ref(storage, storageRefStr));
-        } catch (cleanupErr) {
-          console.warn("Failed to clean up Firebase Storage file after error:", cleanupErr);
-        }
-      }
       setUploadProgress(null);
       handleError(err);
     }
