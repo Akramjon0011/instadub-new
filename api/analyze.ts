@@ -4,6 +4,8 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { enforceRateLimit } from './rateLimit';
 
+export const maxDuration = 60; // Set Vercel timeout to 60 seconds
+
 // Initialize Firebase Admin (only project ID needed for token verification)
 const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'ornate-loader-471914-h0';
 if (!getApps().length) {
@@ -153,8 +155,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       5. **TOPIC:** Create a file-safe slug describing the topic.
     `;
 
-    console.log(`Generating content with 2026 models chain (gemini-3.5-flash-lite -> gemini-3.6-flash -> gemini-2.5-flash)...`);
-    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-2.5-flash'];
+    console.log(`Generating content with 2026 models chain (gemini-3.5-flash-lite)...`);
+    const modelsToTry = ['gemini-3.5-flash-lite'];
     let response;
     let lastErr;
     for (const modelName of modelsToTry) {

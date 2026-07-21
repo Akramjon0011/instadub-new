@@ -4,6 +4,8 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { enforceRateLimit } from './rateLimit';
 
+export const maxDuration = 60; // Set Vercel timeout to 60 seconds
+
 // Initialize Firebase Admin (only project ID needed for token verification)
 const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'ornate-loader-471914-h0';
 if (!getApps().length) {
@@ -96,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 4. Request TTS Audio from Gemini
     console.log(`Generating speech using 2026 TTS models chain for voice: ${actualVoiceName}...`);
-    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash'];
+    const modelsToTry = ['gemini-3.5-flash-lite'];
     let response;
     let lastErr;
     for (const modelName of modelsToTry) {
