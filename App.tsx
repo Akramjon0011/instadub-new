@@ -73,6 +73,24 @@ const App: React.FC = () => {
     }
   };
 
+  const copyHistoryText = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert("Tarjima matni nusxalandi!");
+  };
+
+  const downloadHistorySRT = (translatedText: string) => {
+    const srtContent = `1\n00:00:00,000 --> 00:00:15,000\n${translatedText}\n`;
+    const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `subtitr_${Date.now()}.srt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // Helper to get video duration before processing
   const getVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
@@ -540,8 +558,22 @@ const App: React.FC = () => {
                           {log.createdAt?.toDate ? new Date(log.createdAt.toDate()).toLocaleString() : ''}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-400 mb-1.5 truncate"><strong>Original:</strong> {log.originalText}</p>
-                      <p className="text-sm text-white font-medium truncate"><strong>Tarjima:</strong> {log.translatedText}</p>
+                      <p className="text-sm text-gray-400 mb-1.5"><strong>Original:</strong> {log.originalText}</p>
+                      <p className="text-sm text-white font-medium mb-3"><strong>Tarjima:</strong> {log.translatedText}</p>
+                      <div className="flex gap-2 justify-end pt-2 border-t border-white/5">
+                        <button 
+                          onClick={() => copyHistoryText(log.translatedText)}
+                          className="text-xs bg-white/5 hover:bg-white/10 text-gray-300 px-3 py-1.5 rounded-lg border border-white/5 transition-all flex items-center gap-1 active:scale-[0.97]"
+                        >
+                          📋 Nusxalash
+                        </button>
+                        <button 
+                          onClick={() => downloadHistorySRT(log.translatedText)}
+                          className="text-xs bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 px-3 py-1.5 rounded-lg border border-indigo-500/30 transition-all flex items-center gap-1 active:scale-[0.97]"
+                        >
+                          📜 Subtitr (.srt)
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
