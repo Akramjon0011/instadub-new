@@ -163,8 +163,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         console.log(`Attempting model: ${modelName}...`);
         const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+        const actualApiModel = modelName.includes('3.') || modelName.includes('2.') ? 'gemini-1.5-flash' : modelName;
         const genOptions = {
-          model: modelName,
+          model: actualApiModel,
           contents: [
             {
               role: 'user',
