@@ -293,7 +293,7 @@ const App: React.FC = () => {
     } else if (friendlyMessage.includes('400')) {
         friendlyMessage = "Noto'g'ri so'rov. Ehtimol fayl formati xato yoki hajmi (max 50MB) to'g'ri kelmadi.";
     } else if (friendlyMessage.includes('403') || friendlyMessage.includes('PERMISSION_DENIED')) {
-        friendlyMessage = "API kaliti ruxsatiga ega emas (403). Iltimos, AI Studio API sozlamalarini tekshiring yoki modelni o'zgartiring.";
+        friendlyMessage = `API kaliti ruxsatiga ega emas (403). Real xato: ${err.message}`;
     } else if (friendlyMessage.includes('429')) {
         friendlyMessage = "API so'rovlar limiti tugadi. Birozdan so'ng urinib ko'ring.";
     } else if (friendlyMessage.includes('503')) {

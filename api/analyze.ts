@@ -16,7 +16,7 @@ if (!getApps().length) {
 
 const VERTEX_PROJECT = process.env.VERTEX_PROJECT || "gen-lang-client-0017562692";
 
-function getAI(location = "global"): GoogleGenAI {
+function getAI(location = "us-central1"): GoogleGenAI {
   const raw = process.env.GCP_SERVICE_ACCOUNT_JSON;
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
