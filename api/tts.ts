@@ -14,25 +14,32 @@ if (!getApps().length) {
 
 const VERTEX_PROJECT = process.env.VERTEX_PROJECT || "gen-lang-client-0017562692";
 
-function getVertexCredentials() {
-  const raw = process.env.GCP_SERVICE_ACCOUNT_JSON;
-  if (!raw) {
-    throw new Error("GCP_SERVICE_ACCOUNT_JSON sozlanmagan. Host'ning Environment Variables bo'limiga Vertex service account JSON qo'shing.");
-  }
-  const sa = JSON.parse(raw);
-  if (typeof sa.private_key === "string") {
-    sa.private_key = sa.private_key.replace(/\\n/g, "\n");
-  }
-  return sa;
-}
-
 function getTTSAI(): GoogleGenAI {
-  return new GoogleGenAI({
-    vertexai: true,
-    project: VERTEX_PROJECT,
-    location: "us-central1",
-    googleAuthOptions: { credentials: getVertexCredentials(), scopes: ["https://www.googleapis.com/auth/cloud-platform"] },
-  });
+  const raw = process.env.GCP_SERVICE_ACCOUNT_JSON;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+
+  if (raw) {
+    try {
+      const sa = JSON.parse(raw);
+      if (typeof sa.private_key === "string") {
+        sa.private_key = sa.private_key.replace(/\\n/g, "\n");
+      }
+      return new GoogleGenAI({
+        vertexai: true,
+        project: VERTEX_PROJECT,
+        location: "us-central1",
+        googleAuthOptions: { credentials: sa, scopes: ["https://www.googleapis.com/auth/cloud-platform"] },
+      });
+    } catch (e) {
+      console.warn("GCP_SERVICE_ACCOUNT_JSON parse qilishda xatolik, GEMINI_API_KEY ga o'tilmoqda...", e);
+    }
+  }
+
+  if (apiKey) {
+    return new GoogleGenAI({ apiKey });
+  }
+
+  throw new Error("GCP_SERVICE_ACCOUNT_JSON yoki GEMINI_API_KEY sozlanmagan. Vercel Environment Variables bo'limiga kalit qo'shing.");
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -95,7 +102,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const modelName of modelsToTry) {
       try {
         console.log(`Attempting TTS model: ${modelName}...`);
-        response = await ai.models.generateContent({
+        const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+        const genOptions = {
           model: modelName,
           contents: [{ parts: [{ text: text.trim() }] }],
           config: {
@@ -106,7 +114,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               },
             },
           },
-        });
+        };
+
+        try {
+          response = await ai.models.generateContent(genOptions);
+        } catch (attemptErr: any) {
+          const msg = attemptErr?.message || String(attemptErr);
+          if ((msg.includes("403") || msg.includes("PERMISSION_DENIED")) && apiKey) {
+            console.warn(`Vertex AI TTS returned 403. Retrying model ${modelName} with GEMINI_API_KEY via AI Studio...`, attemptErr);
+            const aiStudio = new GoogleGenAI({ apiKey });
+            response = await aiStudio.models.generateContent(genOptions);
+          } else {
+            throw attemptErr;
+          }
+        }
         if (response) {
           console.log(`Successfully generated TTS audio using ${modelName}`);
           break;
