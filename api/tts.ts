@@ -88,19 +88,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = getTTSAI();
 
     // 4. Request TTS Audio from Gemini
-    console.log(`Generating speech using gemini-3.1-flash-tts-preview for voice: ${actualVoiceName}...`);
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-tts-preview',
-      contents: [{ parts: [{ text: text.trim() }] }],
-      config: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: actualVoiceName },
+    console.log(`Generating speech using gemini-2.0-flash for voice: ${actualVoiceName}...`);
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: [{ parts: [{ text: text.trim() }] }],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: actualVoiceName },
+            },
           },
         },
-      },
-    });
+      });
+    } catch (modelErr) {
+      console.warn("gemini-2.0-flash TTS failed, falling back to gemini-1.5-flash:", modelErr);
+      response = await ai.models.generateContent({
+        model: 'gemini-1.5-flash',
+        contents: [{ parts: [{ text: text.trim() }] }],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: actualVoiceName },
+            },
+          },
+        },
+      });
+    }
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64Audio) {
