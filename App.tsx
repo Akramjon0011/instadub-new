@@ -59,6 +59,20 @@ const App: React.FC = () => {
   const [editableText, setEditableText] = useState<string>('');
   const [targetLanguage, setTargetLanguage] = useState<string>("O'zbek"); // Added target language
 
+  const handlePreviewVoice = (e: React.MouseEvent, voiceName: string, genderStr: string) => {
+    e.stopPropagation();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const isFemale = genderStr.includes('Ayol');
+      const text = `Salom, bu ${voiceName} ovoz namunasi.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "uz-UZ";
+      utterance.pitch = isFemale ? 1.25 : 0.85;
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
   // Helper to get video duration before processing
   const getVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
@@ -675,20 +689,47 @@ const App: React.FC = () => {
 
              <div className="mb-6">
                <label className="block text-xs font-bold text-gray-400 mb-2.5 uppercase tracking-wider">Ovoz (Speaker)</label>
-               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {['Fenrir', 'Charon', 'Puck', 'Kore'].map((voice) => (
-                    <button
-                      key={voice}
-                      onClick={() => setSelectedVoice(voice)}
-                      className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-[0.97] ${
-                        selectedVoice === voice 
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/20 scale-102 border border-indigo-500/30' 
-                        : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/5'
-                      }`}
-                    >
-                      {voice} {voice === tempData.recommendedVoice && <span className="text-[10px] opacity-75 font-bold">(AI)</span>}
-                    </button>
-                  ))}
+               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                 {[
+                     { name: 'Fenrir', gender: '👨 Erkak (Chuqur)' },
+                     { name: 'Charon', gender: '👨 Erkak (Vazmin)' },
+                     { name: 'Puck', gender: '👨 Erkak (Tinch)' },
+                     { name: 'Orpheus', gender: '👨 Erkak (Tantanali)' },
+                     { name: 'Aoede', gender: '👨 Erkak (Yumshoq)' },
+                     { name: 'Zephyr', gender: '👨 Erkak (Jonli)' },
+                     { name: 'Kore', gender: '👩 Ayol (Mayin)' },
+                     { name: 'Leda', gender: '👩 Ayol (Rasmiy)' },
+                     { name: 'Callisto', gender: '👩 Ayol (Energetik)' },
+                     { name: 'Evadne', gender: '👩 Ayol (Tinch)' },
+                     { name: 'Amalthea', gender: '👩 Ayol (Yorqin)' },
+                     { name: 'Despina', gender: '👩 Ayol (Yumshoq)' },
+                   ].map((v) => (
+                     <button
+                       key={v.name}
+                       onClick={() => setSelectedVoice(v.name)}
+                       className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 text-left flex flex-col active:scale-[0.97] ${
+                         selectedVoice === v.name 
+                         ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/20 scale-102 border border-indigo-500/30' 
+                         : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/5'
+                       }`}
+                     >
+                       <div className="flex items-center justify-between w-full">
+                         <span>{v.name}</span>
+                         <div className="flex items-center gap-1.5">
+                           {v.name === tempData.recommendedVoice && <span className="text-[10px] bg-indigo-500/30 text-indigo-200 px-1.5 py-0.5 rounded font-bold">AI</span>}
+                           <span 
+                             role="button"
+                             title="Ovoz namunasi tinglash"
+                             onClick={(e) => handlePreviewVoice(e, v.name, v.gender)}
+                             className="p-1 rounded-full hover:bg-white/20 transition-all text-xs opacity-75 hover:opacity-100"
+                           >
+                             🔊
+                           </span>
+                         </div>
+                       </div>
+                       <span className="text-[10px] opacity-60 font-normal mt-0.5">{v.gender}</span>
+                     </button>
+                   ))}
                </div>
              </div>
 

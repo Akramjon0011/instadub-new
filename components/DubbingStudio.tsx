@@ -233,7 +233,7 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
       } else if (vid.mozCaptureStream) {
         stream = vid.mozCaptureStream();
       } else {
-        throw new Error("Browser capture not supported");
+        throw new Error("SAFARI_UNSUPPORTED");
       }
 
       try {
@@ -350,8 +350,37 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
     } catch (e: any) {
       console.error("Recording failed", e);
       setIsRendering(false);
-      alert("Yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
+      
+      if (e.message === "SAFARI_UNSUPPORTED") {
+         alert("Sizning brauzeringiz (Safari/iPhone) videoni saqlashni qo'llab-quvvatlamaydi. Iltimos, Chrome, Edge yoki Android qurilmasidan foydalaning.");
+      } else {
+         alert("Yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
+      }
     }
+  };
+
+  const downloadSubtitles = () => {
+    if (!result.translatedText) return;
+    const duration = syncStats.videoDur || 10;
+    const formatSRTTime = (sec: number) => {
+      const hrs = Math.floor(sec / 3600).toString().padStart(2, '0');
+      const mins = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
+      const secs = Math.floor(sec % 60).toString().padStart(2, '0');
+      const ms = Math.floor((sec % 1) * 1000).toString().padStart(3, '0');
+      return `${hrs}:${mins}:${secs},${ms}`;
+    };
+
+    const srtContent = `1\n00:00:00,000 --> ${formatSRTTime(duration)}\n${result.translatedText}\n`;
+    
+    const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${result.fileName || 'subtitr'}.srt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const formatTime = (seconds: number) => {
@@ -527,11 +556,11 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
             </div>
 
             {/* Download Action button */}
-            <div className="pt-2">
+            <div className="pt-2 flex flex-col sm:flex-row gap-3">
               <button 
                 onClick={handleDownload}
                 disabled={isRendering}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-6 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-indigo-600/20 disabled:opacity-50 text-sm sm:text-base"
+                className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-6 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-indigo-600/20 disabled:opacity-50 text-sm sm:text-base"
               >
                 {isRendering ? (
                    <>
@@ -544,9 +573,19 @@ const DubbingStudio: React.FC<DubbingStudioProps> = ({ videoFile, result, onRese
                 ) : (
                    <>
                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                     Yuklab Olish (Tayyor video)
+                     Yuklab Olish (Video)
                    </>
                 )}
+              </button>
+
+              <button 
+                onClick={downloadSubtitles}
+                disabled={isRendering}
+                title="Subtitr faylini (.srt) yuklab olish"
+                className="bg-white/5 hover:bg-white/10 text-indigo-300 font-bold py-3 px-4 rounded-2xl border border-white/10 transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-xs sm:text-sm shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+                .SRT Subtitr
               </button>
             </div>
           </div>

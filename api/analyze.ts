@@ -2,12 +2,36 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { enforceRateLimit } from './rateLimit';
 
 // Initialize Firebase Admin (only project ID needed for token verification)
 const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'ornate-loader-471914-h0';
 if (!getApps().length) {
   initializeApp({
     projectId: projectId,
+  });
+}
+
+const VERTEX_PROJECT = process.env.VERTEX_PROJECT || "gen-lang-client-0017562692";
+
+function getVertexCredentials() {
+  const raw = process.env.GCP_SERVICE_ACCOUNT_JSON;
+  if (!raw) {
+    throw new Error("GCP_SERVICE_ACCOUNT_JSON sozlanmagan. Host'ning Environment Variables bo'limiga Vertex service account JSON qo'shing.");
+  }
+  const sa = JSON.parse(raw);
+  if (typeof sa.private_key === "string") {
+    sa.private_key = sa.private_key.replace(/\\n/g, "\n");
+  }
+  return sa;
+}
+
+function getAI(location = "global"): GoogleGenAI {
+  return new GoogleGenAI({
+    vertexai: true,
+    project: VERTEX_PROJECT,
+    location,
+    googleAuthOptions: { credentials: getVertexCredentials(), scopes: ["https://www.googleapis.com/auth/cloud-platform"] },
   });
 }
 
@@ -35,12 +59,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Kirish taqiqlangan: Token topilmadi.' });
   }
 
+  let uid: string;
   const token = authHeader.split('Bearer ')[1];
   try {
-    await getAuth().verifyIdToken(token);
+    const decoded = await getAuth().verifyIdToken(token);
+    uid = decoded.uid;
   } catch (err: any) {
     console.error('Token verification failed:', err);
     return res.status(401).json({ error: 'Seans muddati tugagan yoki xato token.' });
+  }
+
+  try {
+    await enforceRateLimit(uid, 'analyze');
+  } catch (err: any) {
+    return res.status(429).json({ error: err.message });
   }
 
   // 2. Parse request body
@@ -59,15 +91,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!downloadResponse.ok) {
       throw new Error(`Video yuklab olishda xatolik yuz berdi. Status: ${downloadResponse.status}`);
     }
+
+    const contentLength = downloadResponse.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 25 * 1024 * 1024) {
+      throw new Error("Video hajmi 25MB dan oshmasligi kerak (Vercel memory limit).");
+    }
+
     const arrayBuffer = await downloadResponse.arrayBuffer();
     const videoBuffer = Buffer.from(arrayBuffer);
-
-    // 4. Initialize Gemini API Client
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY serverda sozlanmagan.");
+    
+    if (videoBuffer.length > 25 * 1024 * 1024) {
+      throw new Error("Video hajmi 25MB dan oshmasligi kerak.");
     }
-    const ai = new GoogleGenAI({ apiKey });
+
+    // 4. Initialize Gemini API Client via Vertex AI
+    const ai = getAI("global");
 
     // 5. Upload video to Gemini File API
     console.log(`Uploading video buffer to Gemini File API (size: ${videoBuffer.length} bytes)...`);
@@ -140,7 +178,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             original_transcription: { type: 'STRING', description: "Transcription of the original audio in its native language" },
             translated_script: { type: 'STRING', description: `The adapted, rich, and context-aware script perfectly translated into ${actualTargetLanguage}` },
             topic_slug: { type: 'STRING', description: "short_topic_name" },
-            recommended_voice: { type: 'STRING', description: "VoiceName: Fenrir, Charon, Puck, or Kore" }
+            recommended_voice: { type: 'STRING', description: "VoiceName: Male (Fenrir, Charon, Puck, Orpheus, Aoede, Zephyr) or Female (Kore, Leda, Callisto, Evadne, Amalthea, Despina)" }
           },
           required: ["source_language", "original_transcription", "translated_script", "topic_slug", "recommended_voice"]
         }
