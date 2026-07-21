@@ -159,27 +159,70 @@ const App: React.FC = () => {
     setVideoFile(file);
     setStatus(ProcessStatus.ANALYZING);
     setError(null);
-    setUploadProgress(20);
+    setUploadProgress(5);
+
+    let storageRefStr = '';
 
     try {
       // Step 0: Get Video Duration
       const duration = await getVideoDuration(file);
       console.log(`Video duration detected: ${duration} seconds`);
-      setUploadProgress(60);
+      setUploadProgress(10);
 
-      // Step 0.5: Convert video file directly to Base64 payload
-      console.log("Preparing video payload for direct AI analysis...");
-      const generativePart = await fileToGenerativePart(file);
-      setUploadProgress(100);
+      const MAX_BASE64_SIZE = 3 * 1024 * 1024; // 3MB limit for direct Base64 POST body to prevent Vercel 413
+      let videoInput: { videoUrl?: string; videoBase64?: string } = {};
+
+      if (file.size <= MAX_BASE64_SIZE) {
+        console.log("File is small (<=3MB). Sending direct base64 payload...");
+        const generativePart = await fileToGenerativePart(file);
+        videoInput = { videoBase64: generativePart.inlineData.data };
+        setUploadProgress(100);
+      } else {
+        console.log("File is large (>3MB). Uploading to Firebase Storage to bypass Vercel 4.5MB limit...");
+        const timestamp = Date.now();
+        const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+        storageRefStr = `uploads/${user.uid}/${timestamp}_${cleanFileName}`;
+        const storageRef = ref(storage, storageRefStr);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+              setUploadProgress(progress);
+            },
+            (err) => reject(err),
+            async () => {
+              try {
+                const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                videoInput = { videoUrl: downloadUrl };
+                resolve();
+              } catch (err) {
+                reject(err);
+              }
+            }
+          );
+        });
+      }
+
+      setUploadProgress(null);
 
       // Step 1: Analyze and Translate via serverless API
-      setUploadProgress(null);
       const analysis = await analyzeAndTranslateVideo(
-        { videoBase64: generativePart.inlineData.data },
+        videoInput,
         duration,
         targetLanguage,
         file.type
       );
+
+      // Clean up Firebase Storage file if uploaded
+      if (storageRefStr) {
+        try {
+          await deleteObject(ref(storage, storageRefStr));
+        } catch (cleanupErr) {
+          console.warn("Failed to delete temporary file from Firebase Storage:", cleanupErr);
+        }
+      }
 
       // Save data and move to Review step
       setTempData(analysis);
@@ -187,6 +230,13 @@ const App: React.FC = () => {
       setSelectedVoice(analysis.recommendedVoice);
       setStatus(ProcessStatus.REVIEWING);
     } catch (err: any) {
+      if (storageRefStr) {
+        try {
+          await deleteObject(ref(storage, storageRefStr));
+        } catch (cleanupErr) {
+          console.warn("Failed to clean up Firebase Storage file after error:", cleanupErr);
+        }
+      }
       setUploadProgress(null);
       handleError(err);
     }
