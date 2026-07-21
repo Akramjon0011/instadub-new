@@ -164,8 +164,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       5. **TOPIC:** Create a file-safe slug describing the topic.
     `;
 
-    console.log(`Generating content with 2026 models chain (gemini-2.5-flash -> gemini-2.0-flash -> gemini-1.5-flash)...`);
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    console.log(`Generating content with 2026 models chain (gemini-3.5-flash-lite -> gemini-2.5-flash -> gemini-2.0-flash -> gemini-1.5-flash)...`);
+    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     let response;
     let lastErr;
     for (const modelName of modelsToTry) {

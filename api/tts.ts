@@ -96,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 4. Request TTS Audio from Gemini
     console.log(`Generating speech using 2026 TTS models chain for voice: ${actualVoiceName}...`);
-    const modelsToTry = ['gemini-3.1-flash-tts-preview', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     let response;
     let lastErr;
     for (const modelName of modelsToTry) {
