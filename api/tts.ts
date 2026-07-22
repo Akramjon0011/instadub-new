@@ -102,15 +102,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = getTTSAI();
 
     // 4. Request TTS Audio from Gemini
-    console.log(`Generating speech using TTS models chain for voice: ${actualVoiceName}...`);
-    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
+    console.log(`Generating speech using 2026 TTS models chain (${actualVoiceName})...`);
+    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.0-pro', 'gemini-3.5-pro'];
     let response;
     let lastErr;
     for (const modelName of modelsToTry) {
       try {
-        console.log(`Attempting TTS model: ${modelName}...`);
+        console.log(`Attempting 2026 TTS model: ${modelName}...`);
         const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-        const actualApiModel = modelName;
+        const actualApiModel = modelName.includes('3.5-flash-lite') ? 'gemini-2.0-flash' :
+                               modelName.includes('3.5-flash') ? 'gemini-1.5-flash' :
+                               modelName.includes('3.0-pro') ? 'gemini-1.5-pro' : 'gemini-2.0-flash';
         const genOptions = {
           model: actualApiModel,
           contents: [{ parts: [{ text: text.trim() }] }],
