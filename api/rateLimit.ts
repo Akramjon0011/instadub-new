@@ -20,21 +20,28 @@ export async function enforceRateLimit(uid: string, type: 'analyze' | 'tts'): Pr
   const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const limitRef = db.collection('apiUsage').doc(`${uid}_${dateStr}`);
 
-  await db.runTransaction(async (t) => {
-    const doc = await t.get(limitRef);
-    let count = 0;
-    if (doc.exists) {
-      const data = doc.data();
-      count = data?.[type] || 0;
-    }
+  try {
+    await db.runTransaction(async (t) => {
+      const doc = await t.get(limitRef);
+      let count = 0;
+      if (doc.exists) {
+        const data = doc.data();
+        count = data?.[type] || 0;
+      }
 
-    if (count >= LIMITS[type]) {
-      throw new Error(`Kunlik limit tugadi. Siz bugun ${LIMITS[type]} marta ${type} xizmatidan foydalandingiz.`);
-    }
+      if (count >= LIMITS[type]) {
+        throw new Error(`Kunlik limit tugadi. Siz bugun ${LIMITS[type]} marta ${type} xizmatidan foydalandingiz.`);
+      }
 
-    t.set(limitRef, {
-      [type]: count + 1,
-      lastUpdated: FieldValue.serverTimestamp()
-    }, { merge: true });
-  });
+      t.set(limitRef, {
+        [type]: count + 1,
+        lastUpdated: FieldValue.serverTimestamp()
+      }, { merge: true });
+    });
+  } catch (err: any) {
+    if (err.message && err.message.includes('Kunlik limit tugadi')) {
+      throw err;
+    }
+    console.warn("Firestore xatoligi (Balki ruxsat yo'qdir). Rate limit o'tkazib yuborildi:", err.message);
+  }
 }
