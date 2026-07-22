@@ -17,7 +17,12 @@ if (!getApps().length) {
 const VERTEX_PROJECT = process.env.VERTEX_PROJECT || "gen-lang-client-0017562692";
 
 function getAI(location = "us-central1"): GoogleGenAI {
-  const raw = process.env.GCP_SERVICE_ACCOUNT_JSON;
+  const raw = process.env.GCP_SERVICE_ACCOUNT_JSON || 
+              process.env.FIREBASE_SERVICE_ACCOUNT || 
+              process.env.GCP_SERVICE_ACCOUNT || 
+              process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || 
+              process.env.SERVICE_ACCOUNT_JSON ||
+              process.env.GCP_SA_KEY;
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
   if (raw) {
@@ -155,15 +160,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       5. **TOPIC:** Create a file-safe slug describing the topic.
     `;
 
-    console.log(`Generating content with 2026 models chain (gemini-3.5-flash-lite)...`);
-    const modelsToTry = ['gemini-3.5-flash-lite'];
+    console.log(`Generating content with fallback models chain...`);
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
     let response;
     let lastErr;
     for (const modelName of modelsToTry) {
       try {
         console.log(`Attempting model: ${modelName}...`);
         const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-        const actualApiModel = modelName.includes('3.') || modelName.includes('2.') ? 'gemini-1.5-flash' : modelName;
+        const actualApiModel = modelName;
         const genOptions = {
           model: actualApiModel,
           contents: [

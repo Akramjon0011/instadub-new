@@ -17,7 +17,12 @@ if (!getApps().length) {
 const VERTEX_PROJECT = process.env.VERTEX_PROJECT || "gen-lang-client-0017562692";
 
 function getTTSAI(): GoogleGenAI {
-  const raw = process.env.GCP_SERVICE_ACCOUNT_JSON;
+  const raw = process.env.GCP_SERVICE_ACCOUNT_JSON || 
+              process.env.FIREBASE_SERVICE_ACCOUNT || 
+              process.env.GCP_SERVICE_ACCOUNT || 
+              process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || 
+              process.env.SERVICE_ACCOUNT_JSON ||
+              process.env.GCP_SA_KEY;
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
   if (raw) {
@@ -97,15 +102,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = getTTSAI();
 
     // 4. Request TTS Audio from Gemini
-    console.log(`Generating speech using 2026 TTS models chain for voice: ${actualVoiceName}...`);
-    const modelsToTry = ['gemini-3.5-flash-lite'];
+    console.log(`Generating speech using TTS models chain for voice: ${actualVoiceName}...`);
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
     let response;
     let lastErr;
     for (const modelName of modelsToTry) {
       try {
         console.log(`Attempting TTS model: ${modelName}...`);
         const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-        const actualApiModel = modelName.includes('3.') || modelName.includes('2.') ? 'gemini-1.5-flash' : modelName;
+        const actualApiModel = modelName;
         const genOptions = {
           model: actualApiModel,
           contents: [{ parts: [{ text: text.trim() }] }],
