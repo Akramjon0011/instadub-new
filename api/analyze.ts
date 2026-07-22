@@ -28,7 +28,7 @@ function getAI(location = "us-central1"): GoogleGenAI {
       }
       return new GoogleGenAI({
         vertexai: true,
-        project: VERTEX_PROJECT,
+        project: process.env.VERTEX_PROJECT || sa.project_id || VERTEX_PROJECT,
         location,
         googleAuthOptions: { credentials: sa, scopes: ["https://www.googleapis.com/auth/cloud-platform"] },
       });
