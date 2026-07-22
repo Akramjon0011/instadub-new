@@ -169,17 +169,17 @@ const App: React.FC = () => {
       console.log(`Video duration detected: ${duration} seconds`);
       setUploadProgress(10);
 
-      const MAX_BASE64_SIZE = 4 * 1024 * 1024; // 4MB limit for direct Base64 payload
+      const MAX_BASE64_SIZE = 3 * 1024 * 1024; // 3MB limit (Base64 ~3.9MB, safely below Vercel's 4.5MB limit)
       let videoInput: { videoUrl?: string; videoBase64?: string } = {};
 
       if (file.size <= MAX_BASE64_SIZE) {
-        console.log("File is <= 4MB. Sending direct base64 payload...");
+        console.log("File is <= 3MB. Sending direct base64 payload...");
         setUploadProgress(50);
         const generativePart = await fileToGenerativePart(file);
         videoInput = { videoBase64: generativePart.inlineData.data };
         setUploadProgress(100);
       } else {
-        console.log("File is > 4MB. Attempting upload to Firebase Storage...");
+        console.log("File is > 3MB. Uploading to Firebase Storage...");
         try {
           const timestamp = Date.now();
           const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
@@ -190,8 +190,8 @@ const App: React.FC = () => {
           await new Promise<void>((resolve, reject) => {
             const timeoutId = setTimeout(() => {
               uploadTask.cancel();
-              reject(new Error("Firebase Storage yuklash vaqti tugadi (Timeout). Direct Base64 rejimiga o'tilmoqda."));
-            }, 15000); // 15 seconds timeout
+              reject(new Error("Firebase Storage ga ulanish vaqti tugadi (Timeout)."));
+            }, 20000); // 20 seconds timeout
 
             uploadTask.on('state_changed',
               (snapshot) => {
@@ -215,11 +215,15 @@ const App: React.FC = () => {
             );
           });
         } catch (storageErr) {
-          console.warn("Firebase Storage upload failed or timed out. Falling back to direct Base64...", storageErr);
-          setUploadProgress(50);
-          const generativePart = await fileToGenerativePart(file);
-          videoInput = { videoBase64: generativePart.inlineData.data };
-          setUploadProgress(100);
+          console.warn("Firebase Storage upload failed or timed out:", storageErr);
+          if (file.size <= MAX_BASE64_SIZE) {
+            setUploadProgress(50);
+            const generativePart = await fileToGenerativePart(file);
+            videoInput = { videoBase64: generativePart.inlineData.data };
+            setUploadProgress(100);
+          } else {
+            throw new Error("Video hajmi 3MB dan katta va saqlash omboriga yuklab bo'lmadi. Iltimos 3MB dan kichikroq video tanlang.");
+          }
         }
       }
 
@@ -314,6 +318,8 @@ const App: React.FC = () => {
         friendlyMessage = `API kaliti ruxsatiga ega emas (403). Real xato: ${err.message}`;
     } else if (friendlyMessage.includes('429')) {
         friendlyMessage = "API so'rovlar limiti tugadi. Birozdan so'ng urinib ko'ring.";
+    } else if (friendlyMessage.includes('413')) {
+        friendlyMessage = "Video fayli hajmi katta (max 3MB). Vercel serverlarida 4.5MB limit bor. Iltimos, 3MB dan kichikroq video yuklang.";
     } else if (friendlyMessage.includes('503')) {
         friendlyMessage = "Gemini serveri band. Iltimos qaytadan urinib ko'ring.";
     }
